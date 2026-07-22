@@ -1,0 +1,156 @@
+{
+  "locations": [
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-LOC-001", "publish": true,
+      "name": "ChargeX Patong Beach", "address": "198 Thawewong Rd, Patong", "city": "Phuket",
+      "postal_code": "83150", "country": "THA",
+      "coordinates": {"latitude": "7.89610", "longitude": "98.29661"},
+      "parking_type": "PARKING_LOT",
+      "evses": [
+        {
+          "uid": "CHX-EVSE-0001", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE", "RFID_READER", "RESERVABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_3_PHASE",
+             "max_voltage": 400, "max_amperage": 32, "max_electric_power": 22000,
+             "tariff_ids": ["CHX-TAR-AC1"], "last_updated": "2026-06-25T05:00:00Z"}
+          ],
+          "last_updated": "2026-06-25T05:00:00Z"
+        }
+      ],
+      "operator": {"name": "ChargeX"},
+      "facilities": ["HOTEL", "RESTAURANT"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-06-25T05:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-LOC-002", "publish": true,
+      "name": "ChargeX Phuket Old Town", "address": "88 Thalang Rd", "city": "Phuket",
+      "postal_code": "83000", "country": "THA",
+      "coordinates": {"latitude": "7.88519", "longitude": "98.38791"},
+      "parking_type": "ON_STREET",
+      "evses": [
+        {
+          "uid": "CHX-EVSE-0002", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "CABLE", "power_type": "AC_1_PHASE",
+             "max_voltage": 230, "max_amperage": 32, "max_electric_power": 7400,
+             "tariff_ids": ["CHX-TAR-AC1"], "last_updated": "2026-06-29T11:30:00Z"}
+          ],
+          "last_updated": "2026-06-29T11:30:00Z"
+        }
+      ],
+      "operator": {"name": "ChargeX"},
+      "facilities": ["CAFE", "MUSEUM"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": false, "regular_hours": [
+        {"weekday": 1, "period_begin": "07:00", "period_end": "22:00"},
+        {"weekday": 2, "period_begin": "07:00", "period_end": "22:00"},
+        {"weekday": 3, "period_begin": "07:00", "period_end": "22:00"},
+        {"weekday": 4, "period_begin": "07:00", "period_end": "22:00"},
+        {"weekday": 5, "period_begin": "07:00", "period_end": "23:00"},
+        {"weekday": 6, "period_begin": "07:00", "period_end": "23:00"},
+        {"weekday": 7, "period_begin": "07:00", "period_end": "22:00"}
+      ]},
+      "last_updated": "2026-06-29T11:30:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-LOC-003", "publish": true,
+      "name": "ChargeX Krabi Ao Nang", "address": "245 Ao Nang", "city": "Krabi",
+      "postal_code": "81180", "country": "THA",
+      "coordinates": {"latitude": "8.03202", "longitude": "98.82092"},
+      "parking_type": "PARKING_LOT",
+      "evses": [
+        {
+          "uid": "CHX-EVSE-0003", "status": "CHARGING",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2_COMBO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 500, "max_amperage": 120, "max_electric_power": 60000,
+             "tariff_ids": ["CHX-TAR-DC1"], "last_updated": "2026-07-01T14:00:00Z"}
+          ],
+          "last_updated": "2026-07-01T14:00:00Z"
+        },
+        {
+          "uid": "CHX-EVSE-0004", "status": "OUTOFORDER",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "CHADEMO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 500, "max_amperage": 100, "max_electric_power": 50000,
+             "tariff_ids": ["CHX-TAR-DC1"], "last_updated": "2026-07-01T14:00:00Z"}
+          ],
+          "last_updated": "2026-07-01T14:00:00Z"
+        }
+      ],
+      "operator": {"name": "ChargeX"},
+      "facilities": ["HOTEL", "WIFI"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-01T14:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-LOC-004", "publish": true,
+      "name": "ChargeX Surat Thani Ferry Pier", "address": "12 Donsak Pier Rd", "city": "Surat Thani",
+      "postal_code": "84220", "country": "THA",
+      "coordinates": {"latitude": "9.31631", "longitude": "99.69296"},
+      "parking_type": "PARKING_LOT",
+      "evses": [
+        {
+          "uid": "CHX-EVSE-0005", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE", "RFID_READER"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2_COMBO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 920, "max_amperage": 200, "max_electric_power": 120000,
+             "tariff_ids": ["CHX-TAR-DC1"], "last_updated": "2026-07-06T06:40:00Z"},
+            {"id": "2", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_3_PHASE",
+             "max_voltage": 400, "max_amperage": 32, "max_electric_power": 22000,
+             "tariff_ids": ["CHX-TAR-WEEKEND"], "last_updated": "2026-07-06T06:40:00Z"}
+          ],
+          "last_updated": "2026-07-06T06:40:00Z"
+        }
+      ],
+      "operator": {"name": "ChargeX"},
+      "facilities": ["RESTAURANT"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-06T06:40:00Z"
+    }
+  ],
+  "tariffs": [
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-TAR-AC1", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "AC charging 7.20 THB/kWh"}
+      ],
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 7.2, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-06-25T04:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-TAR-DC1", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "DC fast charging 10.90 THB/kWh, min 50 THB per session"}
+      ],
+      "min_price": {"excl_vat": 50, "incl_vat": 53.5},
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 10.9, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-06-25T04:05:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "CHX", "id": "CHX-TAR-WEEKEND", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "Weekend special 5.50 THB/kWh Sat-Sun, otherwise 7.20 THB/kWh"}
+      ],
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 5.5, "vat": 7, "step_size": 1}],
+         "restrictions": {"day_of_week": ["SATURDAY", "SUNDAY"]}},
+        {"price_components": [{"type": "ENERGY", "price": 7.2, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-07-03T03:00:00Z"
+    }
+  ]
+}

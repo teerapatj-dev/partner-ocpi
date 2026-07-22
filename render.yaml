@@ -1,0 +1,56 @@
+# Render Blueprint — 3 free web services, one per mock partner.
+# DATABASE_URL is set manually per service (sync: false): create one Neon
+# project with 3 databases (partner_plg / partner_vct / partner_chx) and paste
+# each connection string in the Render dashboard when prompted.
+# BASE_URL is not needed on Render — the app falls back to RENDER_EXTERNAL_URL.
+services:
+  - type: web
+    name: mock-ocpi-plugsiam
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PARTNER_NAME
+        value: PlugSiam
+      - key: PARTNER_PARTY_ID
+        value: PLG
+      - key: PARTNER_COUNTRY_CODE
+        value: TH
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_API_KEY
+        generateValue: true
+
+  - type: web
+    name: mock-ocpi-voltcity
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PARTNER_NAME
+        value: VoltCity
+      - key: PARTNER_PARTY_ID
+        value: VCT
+      - key: PARTNER_COUNTRY_CODE
+        value: TH
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_API_KEY
+        generateValue: true
+
+  - type: web
+    name: mock-ocpi-chargex
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PARTNER_NAME
+        value: ChargeX
+      - key: PARTNER_PARTY_ID
+        value: CHX
+      - key: PARTNER_COUNTRY_CODE
+        value: TH
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_API_KEY
+        generateValue: true

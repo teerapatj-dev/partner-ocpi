@@ -1,0 +1,151 @@
+{
+  "locations": [
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-LOC-001", "publish": true,
+      "name": "VoltCity Nimman", "address": "14 Nimmanhaemin Rd, Suthep", "city": "Chiang Mai",
+      "postal_code": "50200", "country": "THA",
+      "coordinates": {"latitude": "18.80003", "longitude": "98.96766"},
+      "parking_type": "PARKING_LOT",
+      "evses": [
+        {
+          "uid": "VCT-EVSE-0001", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE", "RFID_READER"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_3_PHASE",
+             "max_voltage": 400, "max_amperage": 32, "max_electric_power": 22000,
+             "tariff_ids": ["VCT-TAR-AC1"], "last_updated": "2026-06-28T02:00:00Z"}
+          ],
+          "last_updated": "2026-06-28T02:00:00Z"
+        }
+      ],
+      "operator": {"name": "VoltCity"},
+      "facilities": ["CAFE", "WIFI"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-06-28T02:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-LOC-002", "publish": true,
+      "name": "VoltCity Central Airport", "address": "2 Mahidol Rd, Haiya", "city": "Chiang Mai",
+      "postal_code": "50100", "country": "THA",
+      "coordinates": {"latitude": "18.76912", "longitude": "98.97440"},
+      "parking_type": "PARKING_GARAGE",
+      "evses": [
+        {
+          "uid": "VCT-EVSE-0002", "status": "CHARGING",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2_COMBO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 500, "max_amperage": 150, "max_electric_power": 75000,
+             "tariff_ids": ["VCT-TAR-DC1"], "last_updated": "2026-06-30T07:45:00Z"}
+          ],
+          "last_updated": "2026-06-30T07:45:00Z"
+        },
+        {
+          "uid": "VCT-EVSE-0003", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE", "RESERVABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_3_PHASE",
+             "max_voltage": 400, "max_amperage": 16, "max_electric_power": 11000,
+             "tariff_ids": ["VCT-TAR-AC1"], "last_updated": "2026-06-30T07:45:00Z"}
+          ],
+          "last_updated": "2026-06-30T07:45:00Z"
+        }
+      ],
+      "operator": {"name": "VoltCity"},
+      "facilities": ["MALL", "SUPERMARKET"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-06-30T07:45:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-LOC-003", "publish": true,
+      "name": "VoltCity Lampang Highway", "address": "399 Phahonyothin Rd", "city": "Lampang",
+      "postal_code": "52000", "country": "THA",
+      "coordinates": {"latitude": "18.28532", "longitude": "99.51280"},
+      "parking_type": "ALONG_MOTORWAY",
+      "evses": [
+        {
+          "uid": "VCT-EVSE-0004", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2_COMBO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 920, "max_amperage": 250, "max_electric_power": 160000,
+             "tariff_ids": ["VCT-TAR-DC1"], "last_updated": "2026-07-02T10:20:00Z"},
+            {"id": "2", "standard": "CHADEMO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 500, "max_amperage": 125, "max_electric_power": 62500,
+             "tariff_ids": ["VCT-TAR-DC1"], "last_updated": "2026-07-02T10:20:00Z"}
+          ],
+          "last_updated": "2026-07-02T10:20:00Z"
+        }
+      ],
+      "operator": {"name": "VoltCity"},
+      "facilities": ["RESTAURANT", "WIFI"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-02T10:20:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-LOC-004", "publish": true,
+      "name": "VoltCity Chiang Rai Clock Tower", "address": "573 Banphaprakan Rd", "city": "Chiang Rai",
+      "postal_code": "57000", "country": "THA",
+      "coordinates": {"latitude": "19.90748", "longitude": "99.83079"},
+      "parking_type": "ON_STREET",
+      "evses": [
+        {
+          "uid": "VCT-EVSE-0005", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_1_PHASE",
+             "max_voltage": 230, "max_amperage": 32, "max_electric_power": 7400,
+             "tariff_ids": ["VCT-TAR-NIGHT"], "last_updated": "2026-07-05T09:00:00Z"}
+          ],
+          "last_updated": "2026-07-05T09:00:00Z"
+        }
+      ],
+      "operator": {"name": "VoltCity"},
+      "facilities": ["CAFE"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-05T09:00:00Z"
+    }
+  ],
+  "tariffs": [
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-TAR-AC1", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "AC charging 5.90 THB/kWh with 20 THB session fee"}
+      ],
+      "elements": [
+        {"price_components": [
+          {"type": "FLAT", "price": 20, "vat": 7, "step_size": 1},
+          {"type": "ENERGY", "price": 5.9, "vat": 7, "step_size": 1}
+        ]}
+      ],
+      "last_updated": "2026-06-28T01:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-TAR-DC1", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "DC fast charging 9.50 THB/kWh"},
+        {"language": "th", "text": "ชาร์จเร็ว DC 9.50 บาท/หน่วย"}
+      ],
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 9.5, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-06-28T01:05:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "VCT", "id": "VCT-TAR-NIGHT", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "Night owl: 3.90 THB/kWh 22:00-06:00, otherwise 6.90 THB/kWh"}
+      ],
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 3.9, "vat": 7, "step_size": 1}],
+         "restrictions": {"start_time": "22:00", "end_time": "06:00"}},
+        {"price_components": [{"type": "ENERGY", "price": 6.9, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-07-01T01:00:00Z"
+    }
+  ]
+}

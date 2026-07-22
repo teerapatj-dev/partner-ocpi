@@ -1,0 +1,162 @@
+{
+  "locations": [
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-LOC-001", "publish": true,
+      "name": "PlugSiam Siam Square", "address": "254 Rama I Rd, Pathum Wan", "city": "Bangkok",
+      "postal_code": "10330", "country": "THA",
+      "coordinates": {"latitude": "13.74562", "longitude": "100.53415"},
+      "parking_type": "PARKING_GARAGE",
+      "evses": [
+        {
+          "uid": "PLG-EVSE-0001", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE", "RFID_READER"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_3_PHASE",
+             "max_voltage": 400, "max_amperage": 32, "max_electric_power": 22000,
+             "tariff_ids": ["PLG-TAR-AC1"], "last_updated": "2026-07-01T03:00:00Z"}
+          ],
+          "last_updated": "2026-07-01T03:00:00Z"
+        },
+        {
+          "uid": "PLG-EVSE-0002", "status": "CHARGING",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2_COMBO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 500, "max_amperage": 200, "max_electric_power": 100000,
+             "tariff_ids": ["PLG-TAR-DC1"], "last_updated": "2026-07-01T03:00:00Z"}
+          ],
+          "last_updated": "2026-07-01T03:00:00Z"
+        }
+      ],
+      "operator": {"name": "PlugSiam"},
+      "facilities": ["MALL", "CAFE"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-01T03:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-LOC-002", "publish": true,
+      "name": "PlugSiam Chatuchak", "address": "587 Phahonyothin Rd, Chatuchak", "city": "Bangkok",
+      "postal_code": "10900", "country": "THA",
+      "coordinates": {"latitude": "13.79856", "longitude": "100.55312"},
+      "parking_type": "PARKING_LOT",
+      "evses": [
+        {
+          "uid": "PLG-EVSE-0003", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE", "RESERVABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "SOCKET", "power_type": "AC_3_PHASE",
+             "max_voltage": 400, "max_amperage": 32, "max_electric_power": 22000,
+             "tariff_ids": ["PLG-TAR-AC1"], "last_updated": "2026-07-02T04:30:00Z"},
+            {"id": "2", "standard": "CHADEMO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 500, "max_amperage": 125, "max_electric_power": 62500,
+             "tariff_ids": ["PLG-TAR-DC1"], "last_updated": "2026-07-02T04:30:00Z"}
+          ],
+          "last_updated": "2026-07-02T04:30:00Z"
+        }
+      ],
+      "operator": {"name": "PlugSiam"},
+      "facilities": ["SUPERMARKET"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-02T04:30:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-LOC-003", "publish": true,
+      "name": "PlugSiam Thonglor", "address": "88 Sukhumvit 55, Watthana", "city": "Bangkok",
+      "postal_code": "10110", "country": "THA",
+      "coordinates": {"latitude": "13.73217", "longitude": "100.58312"},
+      "parking_type": "ON_STREET",
+      "evses": [
+        {
+          "uid": "PLG-EVSE-0004", "status": "AVAILABLE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2", "format": "CABLE", "power_type": "AC_1_PHASE",
+             "max_voltage": 230, "max_amperage": 32, "max_electric_power": 7400,
+             "tariff_ids": ["PLG-TAR-TOU"], "last_updated": "2026-07-03T08:00:00Z"}
+          ],
+          "last_updated": "2026-07-03T08:00:00Z"
+        }
+      ],
+      "operator": {"name": "PlugSiam"},
+      "facilities": ["RESTAURANT", "CAFE"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": false, "regular_hours": [
+        {"weekday": 1, "period_begin": "06:00", "period_end": "23:00"},
+        {"weekday": 2, "period_begin": "06:00", "period_end": "23:00"},
+        {"weekday": 3, "period_begin": "06:00", "period_end": "23:00"},
+        {"weekday": 4, "period_begin": "06:00", "period_end": "23:00"},
+        {"weekday": 5, "period_begin": "06:00", "period_end": "23:00"},
+        {"weekday": 6, "period_begin": "08:00", "period_end": "22:00"},
+        {"weekday": 7, "period_begin": "08:00", "period_end": "22:00"}
+      ]},
+      "last_updated": "2026-07-03T08:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-LOC-004", "publish": true,
+      "name": "PlugSiam Bang Na Depot", "address": "1099 Bang Na-Trat Rd", "city": "Bangkok",
+      "postal_code": "10260", "country": "THA",
+      "coordinates": {"latitude": "13.66712", "longitude": "100.63410"},
+      "parking_type": "PARKING_LOT",
+      "evses": [
+        {
+          "uid": "PLG-EVSE-0005", "status": "INOPERATIVE",
+          "capabilities": ["REMOTE_START_STOP_CAPABLE"],
+          "connectors": [
+            {"id": "1", "standard": "IEC_62196_T2_COMBO", "format": "CABLE", "power_type": "DC",
+             "max_voltage": 920, "max_amperage": 300, "max_electric_power": 180000,
+             "tariff_ids": ["PLG-TAR-DC1"], "last_updated": "2026-07-04T01:15:00Z"}
+          ],
+          "last_updated": "2026-07-04T01:15:00Z"
+        }
+      ],
+      "operator": {"name": "PlugSiam"},
+      "facilities": ["WIFI"],
+      "time_zone": "Asia/Bangkok",
+      "opening_times": {"twentyfourseven": true},
+      "last_updated": "2026-07-04T01:15:00Z"
+    }
+  ],
+  "tariffs": [
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-TAR-AC1", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "AC charging 6.50 THB/kWh (excl. VAT)"},
+        {"language": "th", "text": "ชาร์จ AC 6.50 บาท/หน่วย (ไม่รวม VAT)"}
+      ],
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 6.5, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-07-01T02:00:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-TAR-DC1", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "DC fast charging 8.90 THB/kWh + 1 THB/min after 60 min"}
+      ],
+      "elements": [
+        {"price_components": [
+          {"type": "ENERGY", "price": 8.9, "vat": 7, "step_size": 1},
+          {"type": "TIME", "price": 60, "vat": 7, "step_size": 60}
+        ],
+         "restrictions": {"min_duration": 3600}},
+        {"price_components": [{"type": "ENERGY", "price": 8.9, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-07-01T02:10:00Z"
+    },
+    {
+      "country_code": "TH", "party_id": "PLG", "id": "PLG-TAR-TOU", "currency": "THB", "type": "REGULAR",
+      "tariff_alt_text": [
+        {"language": "en", "text": "Time-of-use: 7.80 THB/kWh peak (09:00-22:00), 4.90 THB/kWh off-peak"}
+      ],
+      "elements": [
+        {"price_components": [{"type": "ENERGY", "price": 7.8, "vat": 7, "step_size": 1}],
+         "restrictions": {"start_time": "09:00", "end_time": "22:00",
+           "day_of_week": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]}},
+        {"price_components": [{"type": "ENERGY", "price": 4.9, "vat": 7, "step_size": 1}]}
+      ],
+      "last_updated": "2026-07-02T02:00:00Z"
+    }
+  ]
+}

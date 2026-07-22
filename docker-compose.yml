@@ -1,0 +1,65 @@
+# 3 mock partners + 1 Postgres (3 separate databases — mirrors the Neon setup).
+# Demo-only credentials; nothing here is a real secret.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mock
+      POSTGRES_PASSWORD: mock
+      POSTGRES_DB: mock
+    volumes:
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mock"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  plugsiam:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PARTNER_NAME: PlugSiam
+      PARTNER_PARTY_ID: PLG
+      PARTNER_COUNTRY_CODE: TH
+      DATABASE_URL: postgres://mock:mock@postgres:5432/partner_plg?sslmode=disable
+      BASE_URL: http://localhost:9101
+      ADMIN_API_KEY: plg-admin-key
+    ports:
+      - "9101:8080"
+
+  voltcity:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PARTNER_NAME: VoltCity
+      PARTNER_PARTY_ID: VCT
+      PARTNER_COUNTRY_CODE: TH
+      DATABASE_URL: postgres://mock:mock@postgres:5432/partner_vct?sslmode=disable
+      BASE_URL: http://localhost:9102
+      ADMIN_API_KEY: vct-admin-key
+    ports:
+      - "9102:8080"
+
+  chargex:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PARTNER_NAME: ChargeX
+      PARTNER_PARTY_ID: CHX
+      PARTNER_COUNTRY_CODE: TH
+      DATABASE_URL: postgres://mock:mock@postgres:5432/partner_chx?sslmode=disable
+      BASE_URL: http://localhost:9103
+      ADMIN_API_KEY: chx-admin-key
+    ports:
+      - "9103:8080"
+
+volumes:
+  pgdata:
