@@ -91,6 +91,46 @@ func (ev *Evolt) call(ctx context.Context, method, url, apiKey string, body any)
 	return env.Data, nil
 }
 
+// callRaw is for endpoints that answer bare JSON on success (the adapter's pull passes
+// TariffsPullResponse/LocationsPullResponse through with no envelope — verified against
+// adapter-ocpi handler.go: errors come wrapped and non-2xx, success is c.JSON(200, res) raw).
+func (ev *Evolt) callRaw(ctx context.Context, method, url, apiKey string, body any) (json.RawMessage, error) {
+	var reqBody io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request: %w", err)
+		}
+		reqBody = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := ev.httpc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("evolt %s %s: %w", method, url, err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxRespBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read evolt response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, &DownstreamError{Source: "evolt", Status: resp.StatusCode, Body: jsonOrString(respBody)}
+	}
+	if !json.Valid(respBody) {
+		return nil, fmt.Errorf("evolt returned a non-JSON body")
+	}
+	return respBody, nil
+}
+
 var errNotConfigured = fmt.Errorf("evolt url not configured — set the EVOLT_* env vars")
 
 // PartnerInitial asks orch for a fresh Token A (Evolt side of a
@@ -133,7 +173,7 @@ func (ev *Evolt) AdapterPull(ctx context.Context, module, url, token string, lim
 	if ev.cfg.EvoltAdapterURL == "" {
 		return nil, errNotConfigured
 	}
-	return ev.call(ctx, http.MethodPost, ev.cfg.EvoltAdapterURL+"/ocpi/"+module+"/pull", "",
+	return ev.callRaw(ctx, http.MethodPost, ev.cfg.EvoltAdapterURL+"/ocpi/"+module+"/pull", "",
 		map[string]any{"url": url, "token": token, "limit": limit})
 }
 

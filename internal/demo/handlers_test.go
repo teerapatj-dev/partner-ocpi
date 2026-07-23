@@ -318,7 +318,8 @@ func TestEvoltPullHappy(t *testing.T) {
 			return
 		}
 		pullReq = mustDecode(r)
-		w.Write([]byte(`{"status_code":1000,"data":{"http_status":200,"body":[],"next_url":""}}`))
+		// Real adapter contract: success is the bare pull response, no envelope.
+		w.Write([]byte(`{"http_status":200,"total_count":3,"body":{"data":[]},"next_url":""}`))
 	}))
 	mock := fakeMock(t, map[string]http.HandlerFunc{
 		"GET /admin/tokens/current": jsonResp(`{"status":"REGISTERED","token_inbound":"secret-inbound","token_outbound":"c"}`),
@@ -340,6 +341,9 @@ func TestEvoltPullHappy(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "secret-inbound") {
 		t.Fatal("inbound token leaked to the browser response")
+	}
+	if !strings.Contains(rec.Body.String(), `"total_count":3`) {
+		t.Fatalf("adapter payload not passed through: %s", rec.Body.String())
 	}
 }
 
