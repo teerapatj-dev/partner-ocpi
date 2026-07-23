@@ -62,7 +62,7 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 <main>
   <section>
     <h2><span class="dot" style="background:var(--blue)"></span> 1. Handshake (OCPI Credentials)</h2>
-    <p class="hint">จับคู่ partner ⇄ Evolt แลก Token A/B/C ตาม OCPI 2.2.1 §7 — กดซ้ำได้ (ลงทะเบียนใหม่)</p>
+    <p class="hint">จับคู่ partner ⇄ Evolt แลก Token A/B/C ตาม OCPI 2.2.1 §7 · Evolt มีแค่ POST (ไม่มี PUT/DELETE ตาม spec) ถ้า party นี้ลงทะเบียนไว้แล้วจะได้ error จนกว่าจะล้างฝั่ง Evolt</p>
     <div class="card"><b>Partner เป็นฝ่ายเริ่ม (PlugSiam → Evolt)</b>
       <div class="row"><button onclick="act('partner-init','POST','/api/demo/handshake/partner-init')">เริ่ม handshake</button></div>
     </div>
@@ -134,13 +134,17 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 
 <script>
 const $=id=>document.getElementById(id);
+// ngrok answers plain fetches with its interstitial HTML instead of the API's
+// JSON until this header is present.
+const H={'ngrok-skip-browser-warning':'1'};
+const api=(url,opt={})=>fetch(url,{...opt,headers:{...H,...(opt.headers||{})}});
 const val=id=>$(id).value;
 
 function badge(el,text,cls){el.textContent=text;el.className='badge '+cls}
 
 async function refreshState(){
   try{
-    const r=await fetch('/api/demo/state');const j=await r.json();
+    const r=await api('/api/demo/state');const j=await r.json();
     if(!j.ok)return;
     const d=j.data;
     const p=d.partner;
@@ -164,8 +168,8 @@ async function refreshState(){
 async function refreshOwn(){
   try{
     const [locs,trfs]=await Promise.all([
-      fetch('/api/demo/own/locations').then(r=>r.json()),
-      fetch('/api/demo/own/tariffs').then(r=>r.json())]);
+      api('/api/demo/own/locations').then(r=>r.json()),
+      api('/api/demo/own/tariffs').then(r=>r.json())]);
     if(locs.ok){
       const sl=$('sel-location'),se=$('sel-evse');
       sl.innerHTML='';se.innerHTML='';
@@ -183,7 +187,7 @@ async function refreshOwn(){
 
 async function refreshLog(){
   try{
-    const r=await fetch('/api/demo/requests?limit=50');const j=await r.json();
+    const r=await api('/api/demo/requests?limit=50');const j=await r.json();
     if(!j.ok)return;
     const tb=$('log').querySelector('tbody');
     tb.innerHTML=(j.data||[]).map(e=>{
@@ -199,7 +203,7 @@ async function refreshLog(){
 async function act(name,method,url,body){
   const t=new Date().toLocaleTimeString('th-TH');
   try{
-    const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+    const r=await api(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
     const j=await r.json();
     feed(name,j.ok,`HTTP ${r.status}`,j.ok?j.data:(j.error+(j.detail?' — '+JSON.stringify(j.detail).slice(0,300):'')));
   }catch(e){feed(name,false,'network error',String(e))}
