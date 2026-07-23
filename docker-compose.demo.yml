@@ -1,0 +1,58 @@
+# Web-demo overlay — run together with the base file:
+#   docker compose --env-file .env.demo -f docker-compose.yml -f docker-compose.demo.yml up --build -d
+# Secrets and environment-specific URLs live in .env.demo (never committed);
+# see .env.demo.example for the full list.
+services:
+  demo:
+    build:
+      context: .
+      target: demo
+    depends_on:
+      plugsiam:
+        condition: service_started
+    environment:
+      MOCK_BASE_URL: http://plugsiam:8080
+      MOCK_ADMIN_KEY: ${MOCK_ADMIN_KEY:-plg-admin-key}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      EVOLT_VERSIONS_URL: ${EVOLT_VERSIONS_URL:-}
+      EVOLT_ORCH_URL: ${EVOLT_ORCH_URL:-}
+      EVOLT_ADAPTER_URL: ${EVOLT_ADAPTER_URL:-}
+      EVOLT_ROAMING_URL: ${EVOLT_ROAMING_URL:-}
+      EVOLT_ORCH_API_KEY: ${EVOLT_ORCH_API_KEY:-}
+      EVOLT_ROAMING_API_KEY: ${EVOLT_ROAMING_API_KEY:-}
+      DEMO_ALLOWED_STATION_IDS: ${DEMO_ALLOWED_STATION_IDS:-}
+      DEMO_ENABLE_KAFKA: ${DEMO_ENABLE_KAFKA:-true}
+      DEMO_KAFKA_BROKER: ${DEMO_KAFKA_BROKER:-}
+      DEMO_KAFKA_PARTITION: ${DEMO_KAFKA_PARTITION:-2}
+      DEMO_KAFKA_STATION_ID: ${DEMO_KAFKA_STATION_ID:-}
+      DEMO_KAFKA_EVSE_UID: ${DEMO_KAFKA_EVSE_UID:-}
+      DEMO_KAFKA_EVSE_ID: ${DEMO_KAFKA_EVSE_ID:-}
+    ports:
+      - "9100:8080"
+
+  # Publishes the demo on the permanent hostname. Create a remotely-managed
+  # tunnel in the Cloudflare Zero Trust dashboard, point its public hostname at
+  # http://demo:8080, and put the token in .env.demo.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env.demo}
+    depends_on:
+      - demo
+    restart: unless-stopped
+
+  # Evolt's orch on dev advertises its versions URL as in-cluster DNS; this
+  # shim answers that name inside the compose network and rewrites Host so the
+  # dev ingress routes it. Remove once the team points orch's base_url at bff.
+  evolt-shim:
+    image: caddy:2-alpine
+    volumes:
+      - ./deploy/Caddyfile.shim:/etc/caddy/Caddyfile:ro
+    networks:
+      default:
+        aliases:
+          - orch-ocpi-service.aurora-dev.svc.cluster.local
+
+  # The tunnel URL is what Evolt must call back — override the local BASE_URL.
+  plugsiam:
+    environment:
+      BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:9101}

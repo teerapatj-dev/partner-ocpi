@@ -64,6 +64,21 @@ curl -s localhost:9101/health
 
 **Roaming-In push:** trigger จาก flow จริง (Kafka `tariff_update` / `evse_status`) แล้วดูผลที่ `GET /admin/received/*` + `GET /admin/requests`
 
+## Web demo (แชร์ลิงก์ให้ทีมเล่นครบ loop)
+
+`cmd/demo` คือเว็บ + orchestrator ตัวเดียว: UI หน้าเดียว (embed), API `/api/demo/*` ที่ถือ secret ทั้งหมดฝั่ง server (browser ไม่เห็น token ใดๆ), และ reverse-proxy `/ocpi/*` → PlugSiam เพื่อให้ Evolt callback เข้า hostname เดียวกับที่คนเล่นใช้
+
+**เงื่อนไข network:** เครื่องที่รันต้องต่อ VPN ถึง Evolt dev (Evolt internal ยิงจาก cloud ไม่ได้) — คนอื่นเข้าผ่าน Cloudflare named tunnel
+
+**ตั้งครั้งเดียว:**
+1. Cloudflare dashboard → Zero Trust → Networks → Tunnels → **Create tunnel** (Cloudflared) → copy token
+2. ใน tunnel เพิ่ม **Public hostname** เช่น `ocpi-demo.<your-domain>` → service `http://demo:8080`
+3. `cp .env.demo.example .env.demo` แล้วเติม token + URL Evolt (ขอจากทีม) — ไฟล์นี้ถูก gitignore
+
+**รัน:** `make demo-up` → เปิด `https://ocpi-demo.<your-domain>` (local: `http://localhost:9100`) · ปิด: `make demo-down` · log: `make demo-logs`
+
+หมายเหตุ: หลัง tunnel เปลี่ยน hostname (หรือใช้ quick tunnel) ต้องกด handshake ใหม่ในหน้าเว็บ เพราะ Evolt จำ callback URL เดิม · ปุ่มฝั่ง Evolt ปิดตัวเองพร้อมเหตุผลเมื่อ dev ปิด (~20:00) หรือ Kafka ไม่ถึง
+
 ## Deploy ฟรี: Render + Neon
 
 1. **Neon** (neon.tech): สร้าง project 1 อัน → สร้าง database 3 ก้อน: `partner_plg`, `partner_vct`, `partner_chx` → copy connection string ของแต่ละก้อน (มี `?sslmode=require` อยู่แล้ว)

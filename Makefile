@@ -1,4 +1,15 @@
-.PHONY: build test vet run up down logs
+.PHONY: build test vet run up down logs demo-up demo-down demo-logs
+
+DEMO_COMPOSE = docker compose --env-file .env.demo -f docker-compose.yml -f docker-compose.demo.yml
+
+demo-up:
+	$(DEMO_COMPOSE) up --build -d
+
+demo-down:
+	$(DEMO_COMPOSE) down
+
+demo-logs:
+	$(DEMO_COMPOSE) logs -f demo cloudflared plugsiam
 
 build:
 	go build ./...

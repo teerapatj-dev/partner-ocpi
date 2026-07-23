@@ -1,3 +1,4 @@
 /mock-ocpi-partner
 /bin/
 .env
+.env.demo
