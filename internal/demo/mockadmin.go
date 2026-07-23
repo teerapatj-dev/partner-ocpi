@@ -31,6 +31,10 @@ type DownstreamError struct {
 	Source string
 	Status int
 	Body   json.RawMessage
+	// EnvCode is the business code from the envelope when the rejection came with one (HTTP 200 with
+	// a non-1000 code). Callers that treat one specific code as an expected state — a read-back
+	// before the write, say — match on it instead of the message text.
+	EnvCode string
 }
 
 func (e *DownstreamError) Error() string {

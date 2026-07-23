@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	urlpkg "net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -41,6 +44,15 @@ func (e evoltEnvelope) ok() bool {
 		return e.StatusCode == 1000
 	}
 	return e.Code == "1000"
+}
+
+// codeString normalises the two envelope styles onto one comparable value: orch/roaming answer a
+// string code, the OCPI envelope an int status_code.
+func (e evoltEnvelope) codeString() string {
+	if e.StatusCode != 0 {
+		return strconv.Itoa(e.StatusCode)
+	}
+	return e.Code
 }
 
 func (e evoltEnvelope) describe() string {
@@ -86,7 +98,12 @@ func (ev *Evolt) call(ctx context.Context, method, url, apiKey string, body any)
 		return nil, fmt.Errorf("evolt returned an unrecognized response shape")
 	}
 	if !env.ok() {
-		return nil, &DownstreamError{Source: "evolt (" + env.describe() + ")", Status: resp.StatusCode, Body: jsonOrString(respBody)}
+		return nil, &DownstreamError{
+			Source:  "evolt (" + env.describe() + ")",
+			Status:  resp.StatusCode,
+			Body:    jsonOrString(respBody),
+			EnvCode: env.codeString(),
+		}
 	}
 	return env.Data, nil
 }
@@ -131,7 +148,10 @@ func (ev *Evolt) callRaw(ctx context.Context, method, url, apiKey string, body a
 	return respBody, nil
 }
 
-var errNotConfigured = fmt.Errorf("evolt url not configured — set the EVOLT_* env vars")
+var (
+	errNotConfigured = fmt.Errorf("evolt url not configured — set the EVOLT_* env vars")
+	errNotRegistered = fmt.Errorf("evolt does not hold a registration for this party")
+)
 
 // PartnerInitial asks orch for a fresh Token A (Evolt side of a
 // partner-initiated handshake).
@@ -175,6 +195,65 @@ func (ev *Evolt) AdapterPull(ctx context.Context, module, url, token string, lim
 	}
 	return ev.callRaw(ctx, http.MethodPost, ev.cfg.EvoltAdapterURL+"/ocpi/"+module+"/pull", "",
 		map[string]any{"url": url, "token": token, "limit": limit})
+}
+
+// PartnerCredentialsID resolves the id Evolt filed our registration under. Every partner-cache read
+// is keyed by it, and it changes on each re-handshake, so it is looked up per call rather than
+// configured. Only the id is taken off the response — the row also carries the encrypted outbound
+// token, which must not travel further.
+func (ev *Evolt) PartnerCredentialsID(ctx context.Context, countryCode, partyID string) (string, error) {
+	if ev.cfg.EvoltCoreAuthURL == "" {
+		return "", errNotConfigured
+	}
+	data, err := ev.call(ctx, http.MethodGet, ev.cfg.EvoltCoreAuthURL+"/ocpi/credentials/partners?role=receiver", "", nil)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Partners []struct {
+			CredentialsID string `json:"credentials_id"`
+			CountryCode   string `json:"country_code"`
+			PartyID       string `json:"party_id"`
+		} `json:"partners"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("core-auth returned an unexpected partner list")
+	}
+	for _, p := range out.Partners {
+		if strings.EqualFold(p.CountryCode, countryCode) && strings.EqualFold(p.PartyID, partyID) {
+			return p.CredentialsID, nil
+		}
+	}
+	return "", errNotRegistered
+}
+
+// PartnerCacheWatermark reads the newest last_updated Evolt holds for us in one module — the same
+// endpoint the pull cron uses to resume, which doubles as proof that a push landed.
+func (ev *Evolt) PartnerCacheWatermark(ctx context.Context, module, credentialsID, countryCode, partyID string) (json.RawMessage, error) {
+	if ev.cfg.EvoltRoamingURL == "" {
+		return nil, errNotConfigured
+	}
+	url := fmt.Sprintf("%s/ocpi/partner/%s/latest?credentials_id=%s", ev.cfg.EvoltRoamingURL, module, urlpkg.QueryEscape(credentialsID))
+	// Tariffs key the watermark by credentials_id alone; locations also want the party.
+	if module == "locations" {
+		url += "&country_code=" + urlpkg.QueryEscape(countryCode) + "&party_id=" + urlpkg.QueryEscape(partyID)
+	}
+	return ev.call(ctx, http.MethodGet, url, ev.cfg.RoamingAPIKey, nil)
+}
+
+// PartnerTariffReadback fetches one stored Tariff back out of Evolt's cache, so the demo can show the
+// price Evolt actually holds instead of asserting the push worked from its own HTTP status.
+func (ev *Evolt) PartnerTariffReadback(ctx context.Context, credentialsID, countryCode, partyID, tariffID string) (json.RawMessage, error) {
+	if ev.cfg.EvoltRoamingURL == "" {
+		return nil, errNotConfigured
+	}
+	q := urlpkg.Values{
+		"credentials_id": {credentialsID},
+		"country_code":   {countryCode},
+		"party_id":       {partyID},
+		"tariff_id":      {tariffID},
+	}
+	return ev.call(ctx, http.MethodGet, ev.cfg.EvoltRoamingURL+"/ocpi/partner/tariffs?"+q.Encode(), ev.cfg.RoamingAPIKey, nil)
 }
 
 // RoamingTariffPush triggers the same materialize+fanout the tariff_update

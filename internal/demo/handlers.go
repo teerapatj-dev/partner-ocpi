@@ -159,6 +159,97 @@ func (h *Handlers) partnerName(ctx context.Context) (string, error) {
 	return state.Partner.Name, nil
 }
 
+func (h *Handlers) partnerParty(ctx context.Context) (string, string, error) {
+	raw, err := h.mock.Get(ctx, "/admin/state")
+	if err != nil {
+		return "", "", err
+	}
+	var state struct {
+		Partner struct {
+			CountryCode string `json:"country_code"`
+			PartyID     string `json:"party_id"`
+		} `json:"partner"`
+	}
+	if err := json.Unmarshal(raw, &state); err != nil || state.Partner.PartyID == "" {
+		return "", "", fmt.Errorf("mock state has no partner party")
+	}
+	return state.Partner.CountryCode, state.Partner.PartyID, nil
+}
+
+// EvoltMirror answers what Evolt itself holds about this partner: the registration id it filed us
+// under, the cache watermark per module, and — when a tariff id is given — the stored Tariff read
+// straight back out. It exists so a demo run can be believed without opening the database: a push
+// that returned 1000 but never landed shows up here as an unchanged watermark.
+//
+// Every leg is optional. The dev cluster goes down outside working hours and a half-answer with a
+// note beats an error page that hides the parts that did work.
+func (h *Handlers) EvoltMirror(c echo.Context) error {
+	ctx := c.Request().Context()
+	out := map[string]any{"configured": h.cfg.EvoltCoreAuthURL != "" && h.cfg.EvoltRoamingURL != ""}
+	var notes []string
+
+	countryCode, partyID, err := h.partnerParty(ctx)
+	if err != nil {
+		return fail(c, http.StatusBadGateway, "mock unreachable", nil)
+	}
+	out["country_code"], out["party_id"] = countryCode, partyID
+
+	credentialsID, err := h.evolt.PartnerCredentialsID(ctx, countryCode, partyID)
+	if err != nil {
+		out["registered"] = false
+		if !errors.Is(err, errNotRegistered) {
+			notes = append(notes, describeErr(err))
+		}
+		out["notes"] = notes
+		return ok(c, out)
+	}
+	out["registered"], out["credentials_id"] = true, credentialsID
+
+	for _, module := range []string{"locations", "tariffs"} {
+		data, err := h.evolt.PartnerCacheWatermark(ctx, module, credentialsID, countryCode, partyID)
+		if err != nil {
+			notes = append(notes, module+": "+describeErr(err))
+			continue
+		}
+		out[module] = json.RawMessage(orNull(data))
+	}
+
+	if tariffID := c.QueryParam("tariff_id"); tariffID != "" {
+		data, err := h.evolt.PartnerTariffReadback(ctx, credentialsID, countryCode, partyID, tariffID)
+		switch {
+		case err != nil && !isEnvCode(err, codeTariffNotFound):
+			notes = append(notes, "tariff "+tariffID+": "+describeErr(err))
+		case err != nil:
+			// Not-found is the expected answer before the first push; the UI says so in place of the
+			// tariff rather than as a warning.
+		default:
+			out["tariff"] = json.RawMessage(orNull(data))
+			out["tariff_id"] = tariffID
+		}
+	}
+
+	out["notes"] = notes
+	return ok(c, out)
+}
+
+// codeTariffNotFound is roaming's business code for a tariff the partner cache does not hold.
+const codeTariffNotFound = "2800"
+
+func isEnvCode(err error, code string) bool {
+	var de *DownstreamError
+	return errors.As(err, &de) && de.EnvCode == code
+}
+
+// describeErr keeps a downstream failure readable in the UI without leaking the response body a
+// DownstreamError carries (it can hold whatever the upstream chose to echo back).
+func describeErr(err error) string {
+	var de *DownstreamError
+	if errors.As(err, &de) {
+		return de.Error()
+	}
+	return err.Error()
+}
+
 func (h *Handlers) PushLocation(c echo.Context) error {
 	var req struct {
 		LocationID string `json:"location_id"`
@@ -393,7 +484,7 @@ func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
 		"party_id":     h.cfg.KafkaPartyID,
 		"name":         "demo baseline",
 		"evses": []map[string]any{{
-			"uid":          h.cfg.KafkaEvseUID,
+			"uid":          h.cfg.KafkaOCPIEvseUID,
 			"status":       "UNKNOWN",
 			"last_updated": "2020-01-01T00:00:00Z",
 		}},
