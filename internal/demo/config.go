@@ -56,7 +56,7 @@ func Load() (Config, error) {
 		KafkaEnabled:     boolenvDefault("DEMO_ENABLE_KAFKA", true),
 		KafkaBroker:      getenv("DEMO_KAFKA_BROKER", "redpanda-0.np.th.evtech.dev:9094"),
 		KafkaTopic:       getenv("DEMO_KAFKA_TOPIC", "dev.aurora.ocpi.event.evse_status"),
-		KafkaPartition:   intenv("DEMO_KAFKA_PARTITION", 2),
+		KafkaPartition:   intenv("DEMO_KAFKA_PARTITION", 0),
 		KafkaStationID:   os.Getenv("DEMO_KAFKA_STATION_ID"),
 		KafkaEvseUID:     os.Getenv("DEMO_KAFKA_EVSE_UID"),
 		KafkaEvseID:      os.Getenv("DEMO_KAFKA_EVSE_ID"),
