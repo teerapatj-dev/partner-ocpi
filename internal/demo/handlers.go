@@ -409,6 +409,17 @@ func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// Unregister clears the partner's registration so a repeat demo starts from a
+// clean handshake. Evolt keeps its own record — it implements no DELETE
+// /credentials — so that side is cleared separately.
+func (h *Handlers) Unregister(c echo.Context) error {
+	result, err := h.mock.Delete(c.Request().Context(), "/admin/registrations")
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, json.RawMessage(result))
+}
+
 func (h *Handlers) Own(c echo.Context) error {
 	kind := c.Param("kind")
 	if kind != "locations" && kind != "tariffs" {

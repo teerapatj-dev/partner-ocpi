@@ -69,6 +69,9 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
     <div class="card"><b>Evolt เป็นฝ่ายเริ่ม (Evolt → PlugSiam)</b>
       <div class="row"><button onclick="act('evolt-init','POST','/api/demo/handshake/evolt-init')">ให้ Evolt เริ่ม</button></div>
     </div>
+    <div class="card"><b>ยกเลิกทะเบียนฝั่ง partner</b>
+      <div class="row"><button class="danger" onclick="if(confirm('ล้างทะเบียนของ PlugSiam?\n\nEvolt จะยังจำ PlugSiam ไว้ (ไม่มี DELETE /credentials ตาม spec) ต้องล้างฝั่งนั้นแยก ไม่งั้น handshake ใหม่จะชนของเดิม'))act('unregister','POST','/api/demo/unregister')">ยกเลิกทะเบียน</button></div>
+    </div>
   </section>
 
   <section>
@@ -150,7 +153,7 @@ async function refreshState(){
     const p=d.partner;
     badge($('b-partner'),p?`partner: ${p.partner.name} (${p.partner.country_code}-${p.partner.party_id})`:'partner: mock ล่ม',p?'on':'off');
     const reg=(d.partner&&d.partner.registration_status)||'';
-    badge($('b-reg'),'registration: '+(reg||'ยังไม่มี'),reg==='REGISTERED'?'on':'warn');
+    badge($('b-reg'),'ทะเบียน (ฝั่ง partner): '+(reg||'ยังไม่มี'),reg==='REGISTERED'?'on':'warn');
     badge($('b-evolt'),'Evolt: '+(d.evolt.reachable?'online':(d.evolt.configured?'offline':'ไม่ได้ตั้งค่า')),d.evolt.reachable?'on':'off');
     badge($('b-kafka'),'Kafka: '+(d.kafka.enabled?'พร้อม':'ปิด'),d.kafka.enabled?'on':'warn');
     $('banner').style.display=(d.evolt.configured&&!d.evolt.reachable)?'block':'none';

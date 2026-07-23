@@ -58,6 +58,18 @@ func (s *Store) UpdateRegistration(ctx context.Context, r Registration) error {
 	return err
 }
 
+// DeleteAllRegistrations drops every registration so the next handshake starts
+// from scratch. The counterparty is not told: OCPI's DELETE /credentials is the
+// mechanism for that, and a counterparty that does not implement it has to be
+// cleared by hand.
+func (s *Store) DeleteAllRegistrations(ctx context.Context) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM registrations`)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (s *Store) DeleteRegistration(ctx context.Context, id int64) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM registrations WHERE id=$1`, id)
 	return err

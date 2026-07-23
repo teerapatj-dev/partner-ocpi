@@ -574,3 +574,25 @@ func TestOcpiProxyRejectsDotSegments(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
+
+func TestUnregister(t *testing.T) {
+	called := false
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"DELETE /admin/registrations": func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.Write([]byte(`{"deleted":1}`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+	rec := doReq(t, h.Unregister, http.MethodPost, "/api/demo/unregister", "")
+	got := decode(t, rec)
+	if rec.Code != http.StatusOK || !got.ok || !called {
+		t.Fatalf("unregister failed: %d called=%v %s", rec.Code, called, rec.Body.String())
+	}
+
+	down := newHandlers(t, Config{}, nil, nil)
+	rec = doReq(t, down.Unregister, http.MethodPost, "/", "")
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("mock down must 502, got %d", rec.Code)
+	}
+}
