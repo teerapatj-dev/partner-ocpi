@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCPI Roaming Demo — PlugSiam ⇄ Evolt</title>
+<style>
+:root{--bg:#0f1420;--panel:#171e2e;--panel2:#1d2639;--text:#e6ebf5;--muted:#8b96ad;--line:#2a3550;
+--green:#3ecf8e;--red:#ff6b6b;--amber:#ffb454;--blue:#5aa7ff;--purple:#b78aff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,'Segoe UI',Roboto,'Noto Sans Thai',sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:17px;margin:0}
+.badge{padding:3px 10px;border-radius:20px;font-size:12px;background:var(--panel2);border:1px solid var(--line)}
+.badge.on{color:var(--green);border-color:var(--green)}
+.badge.off{color:var(--red);border-color:var(--red)}
+.badge.warn{color:var(--amber);border-color:var(--amber)}
+#banner{display:none;padding:8px 22px;background:#3a2a12;color:var(--amber);font-size:13px}
+main{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;padding:16px 22px;max-width:1500px;margin:0 auto}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+section h2{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+section p.hint{color:var(--muted);font-size:12px;margin:0 0 12px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px}
+.card b{font-size:13px;display:block;margin-bottom:6px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{background:var(--blue);border:0;border-radius:6px;color:#08101f;font-weight:600;padding:7px 12px;cursor:pointer;font-size:13px}
+button.secondary{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+button.danger{background:var(--red)}
+button.purple{background:var(--purple)}
+button:disabled{opacity:.4;cursor:not-allowed}
+select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;max-width:220px}
+#feed{max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.evt{border-left:3px solid var(--line);padding:6px 10px;background:var(--panel2);border-radius:0 6px 6px 0;font-size:12.5px}
+.evt.ok{border-color:var(--green)} .evt.err{border-color:var(--red)}
+.evt time{color:var(--muted);margin-right:8px}
+.evt pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-all;color:var(--muted);font-size:11.5px;max-height:130px;overflow:auto}
+#log{width:100%;border-collapse:collapse;font-size:12px}
+#log th{color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+#log td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+#log td.path{word-break:break-all;max-width:340px}
+.dir-in{color:var(--green)} .dir-out{color:var(--blue)}
+.code-ok{color:var(--green)} .code-bad{color:var(--red)}
+.counts{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.counts div{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--muted)}
+.counts div b{color:var(--text);font-size:15px;display:block}
+.logwrap{max-height:420px;overflow:auto}
+.wide{grid-column:1/-1}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ OCPI Roaming Demo</h1>
+  <span class="badge" id="b-partner">partner: …</span>
+  <span class="badge" id="b-reg">registration: …</span>
+  <span class="badge" id="b-evolt">Evolt: …</span>
+  <span class="badge" id="b-kafka">Kafka: …</span>
+</header>
+<div id="banner">⚠️ Evolt dev ตอนนี้ติดต่อไม่ได้ (คลัสเตอร์ปิดนอกเวลางาน ~20:00) — ปุ่มฝั่ง Evolt จะ error ชั่วคราว</div>
+
+<main>
+  <section>
+    <h2><span class="dot" style="background:var(--blue)"></span> 1. Handshake (OCPI Credentials)</h2>
+    <p class="hint">จับคู่ partner ⇄ Evolt แลก Token A/B/C ตาม OCPI 2.2.1 §7 — กดซ้ำได้ (ลงทะเบียนใหม่)</p>
+    <div class="card"><b>Partner เป็นฝ่ายเริ่ม (PlugSiam → Evolt)</b>
+      <div class="row"><button onclick="act('partner-init','POST','/api/demo/handshake/partner-init')">เริ่ม handshake</button></div>
+    </div>
+    <div class="card"><b>Evolt เป็นฝ่ายเริ่ม (Evolt → PlugSiam)</b>
+      <div class="row"><button onclick="act('evolt-init','POST','/api/demo/handshake/evolt-init')">ให้ Evolt เริ่ม</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="dot" style="background:var(--green)"></span> 2. Partner → Evolt</h2>
+    <p class="hint">PlugSiam (CPO) ส่งข้อมูลเข้า Evolt (eMSP receiver) และดึงข้อมูลจาก Evolt (CPO sender)</p>
+    <div class="card"><b>Push location เต็มก้อน (PUT)</b>
+      <div class="row"><select id="sel-location"></select>
+      <button onclick="act('push-location','POST','/api/demo/push/location',{location_id:val('sel-location')})">Push</button></div>
+    </div>
+    <div class="card"><b>Push สถานะหัวชาร์จ (PATCH)</b>
+      <div class="row"><select id="sel-evse"></select><select id="sel-evse-status">
+        <option>AVAILABLE</option><option>CHARGING</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option></select>
+      <button onclick="act('push-evse','POST','/api/demo/push/evse-status',{evse_uid:val('sel-evse'),status:val('sel-evse-status')})">Push</button></div>
+    </div>
+    <div class="card"><b>Push / ลบ tariff (PUT · DELETE)</b>
+      <div class="row"><select id="sel-tariff"></select>
+      <button onclick="act('push-tariff','POST','/api/demo/push/tariff',{tariff_id:val('sel-tariff')})">Push</button>
+      <button class="danger" onclick="act('del-tariff','DELETE','/api/demo/push/tariff/'+val('sel-tariff'))">ลบ</button></div>
+    </div>
+    <div class="card"><b>ดึงข้อมูลจริงจาก Evolt (GET + pagination)</b>
+      <div class="row">
+      <button class="secondary" onclick="act('pull-loc','POST','/api/demo/pull/locations',{limit:5})">ดึง locations</button>
+      <button class="secondary" onclick="act('pull-trf','POST','/api/demo/pull/tariffs',{limit:5})">ดึง tariffs</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="dot" style="background:var(--purple)"></span> 3. Evolt → Partner</h2>
+    <p class="hint">Evolt เป็นฝ่ายยิง: ดึงผ่าน adapter, fanout tariff, และ event ตู้ชาร์จผ่าน Kafka จริง</p>
+    <div class="card"><b>Evolt ดึงข้อมูล PlugSiam (adapter pull)</b>
+      <div class="row">
+      <button class="purple" onclick="act('ev-pull-loc','POST','/api/demo/evolt/pull/locations',{limit:5})">ดึง locations</button>
+      <button class="purple" onclick="act('ev-pull-trf','POST','/api/demo/evolt/pull/tariffs',{limit:5})">ดึง tariffs</button></div>
+    </div>
+    <div class="card"><b>Evolt push tariff (fanout เส้นเดียวกับ consumer จริง)</b>
+      <div class="row"><select id="sel-station"></select>
+      <button class="purple" onclick="act('ev-tariff-push','POST','/api/demo/evolt/tariff-push',{station_id:val('sel-station')})">สั่ง push</button></div>
+    </div>
+    <div class="card"><b>Event ตู้ชาร์จผ่าน Kafka → consumer → PATCH กลับมา</b>
+      <div class="row"><select id="sel-kafka-status">
+        <option>AVAILABLE</option><option>CHARGING</option><option>OUTOFORDER</option></select>
+      <button class="purple" id="btn-kafka" onclick="act('ev-kafka','POST','/api/demo/evolt/evse-status-event',{status:val('sel-kafka-status')})">ยิง event</button></div>
+    </div>
+    <div class="card"><b>ล้างข้อมูล mock กลับค่าเริ่มต้น</b>
+      <div class="row"><button class="danger" onclick="if(confirm('ล้างข้อมูล partner ทั้งหมด (ไม่แตะ Evolt)?'))act('reset','POST','/api/demo/reset')">Reset partner</button></div>
+    </div>
+  </section>
+
+  <section class="wide">
+    <h2>ผลการกด (ฝั่งเรา)</h2>
+    <div id="feed"></div>
+  </section>
+
+  <section class="wide">
+    <h2>Request log ของ partner (OCPI จริง วิ่งเข้า-ออก PlugSiam)</h2>
+    <div class="counts" id="counts"></div>
+    <div class="logwrap"><table id="log">
+      <thead><tr><th>เวลา</th><th>ทิศ</th><th>method</th><th>path</th><th>HTTP</th><th>OCPI</th><th>คู่สนทนา</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const val=id=>$(id).value;
+
+function badge(el,text,cls){el.textContent=text;el.className='badge '+cls}
+
+async function refreshState(){
+  try{
+    const r=await fetch('/api/demo/state');const j=await r.json();
+    if(!j.ok)return;
+    const d=j.data;
+    const p=d.partner;
+    badge($('b-partner'),p?`partner: ${p.partner.name} (${p.partner.country_code}-${p.partner.party_id})`:'partner: mock ล่ม',p?'on':'off');
+    const reg=(d.partner&&d.partner.registration_status)||'';
+    badge($('b-reg'),'registration: '+(reg||'ยังไม่มี'),reg==='REGISTERED'?'on':'warn');
+    badge($('b-evolt'),'Evolt: '+(d.evolt.reachable?'online':(d.evolt.configured?'offline':'ไม่ได้ตั้งค่า')),d.evolt.reachable?'on':'off');
+    badge($('b-kafka'),'Kafka: '+(d.kafka.enabled?'พร้อม':'ปิด'),d.kafka.enabled?'on':'warn');
+    $('banner').style.display=(d.evolt.configured&&!d.evolt.reachable)?'block':'none';
+    $('btn-kafka').disabled=!d.kafka.enabled;
+    if(!d.kafka.enabled)$('btn-kafka').title=d.kafka.reason||'';
+    const sel=$('sel-station');
+    if(sel.options.length===0&&(d.allowed_stations||[]).length)
+      d.allowed_stations.forEach(s=>sel.add(new Option(s.slice(0,8)+'…',s)));
+    if(p&&p.counts){
+      $('counts').innerHTML=Object.entries(p.counts).map(([k,v])=>`<div>${k}<b>${v}</b></div>`).join('');
+    }
+  }catch(e){badge($('b-partner'),'partner: demo backend ล่ม','off')}
+}
+
+async function refreshOwn(){
+  try{
+    const [locs,trfs]=await Promise.all([
+      fetch('/api/demo/own/locations').then(r=>r.json()),
+      fetch('/api/demo/own/tariffs').then(r=>r.json())]);
+    if(locs.ok){
+      const sl=$('sel-location'),se=$('sel-evse');
+      sl.innerHTML='';se.innerHTML='';
+      (locs.data||[]).forEach(l=>{
+        sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
+        (l.evses||[]).forEach(e=>se.add(new Option(`${e.uid} (${l.id})`,e.uid)));
+      });
+    }
+    if(trfs.ok){
+      const st=$('sel-tariff');st.innerHTML='';
+      (trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));
+    }
+  }catch(e){}
+}
+
+async function refreshLog(){
+  try{
+    const r=await fetch('/api/demo/requests?limit=50');const j=await r.json();
+    if(!j.ok)return;
+    const tb=$('log').querySelector('tbody');
+    tb.innerHTML=(j.data||[]).map(e=>{
+      const t=(e.ts||'').replace('T',' ').slice(0,19);
+      const okc=e.ocpi_status_code===1000?'code-ok':(e.ocpi_status_code?'code-bad':'');
+      return `<tr><td>${t}</td><td class="dir-${e.direction}">${e.direction==='in'?'⇦ เข้า':'⇨ ออก'}</td>`+
+        `<td>${e.method}</td><td class="path">${e.path}</td><td>${e.http_status||''}</td>`+
+        `<td class="${okc}">${e.ocpi_status_code||''}</td><td>${e.counterparty||''}</td></tr>`;
+    }).join('');
+  }catch(e){}
+}
+
+async function act(name,method,url,body){
+  const t=new Date().toLocaleTimeString('th-TH');
+  try{
+    const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+    const j=await r.json();
+    feed(name,j.ok,`HTTP ${r.status}`,j.ok?j.data:(j.error+(j.detail?' — '+JSON.stringify(j.detail).slice(0,300):'')));
+  }catch(e){feed(name,false,'network error',String(e))}
+  refreshState();refreshLog();refreshOwn();
+}
+
+function feed(name,ok,status,detail){
+  const div=document.createElement('div');
+  div.className='evt '+(ok?'ok':'err');
+  const body=typeof detail==='string'?detail:JSON.stringify(detail,null,1);
+  div.innerHTML=`<time>${new Date().toLocaleTimeString('th-TH')}</time><b>${name}</b> ${ok?'✓':'✗'} ${status}`+
+    (body?`<pre>${body.slice(0,1200)}</pre>`:'');
+  $('feed').prepend(div);
+  while($('feed').children.length>30)$('feed').lastChild.remove();
+}
+
+refreshState();refreshOwn();refreshLog();
+setInterval(refreshState,3000);
+setInterval(refreshLog,3000);
+setInterval(refreshOwn,15000);
+</script>
+</body>
+</html>

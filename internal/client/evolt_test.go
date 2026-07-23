@@ -1,9 +1,11 @@
 package client
 
 import (
+	"encoding/json"
 	"testing"
 
 	"mock-ocpi-partner/internal/ocpi"
+	"mock-ocpi-partner/internal/store"
 )
 
 // Evolt answers three different shapes; the initiator must survive all of them.
@@ -105,5 +107,40 @@ func TestParseAnyStatus(t *testing.T) {
 				t.Fatalf("parseAnyStatus(%s) = (%d,%v), want (%d,%v)", tc.body, got, ok, tc.want, tc.ok)
 			}
 		})
+	}
+}
+
+func TestEndpointURL(t *testing.T) {
+	c := &Client{}
+	reg := store.Registration{Endpoints: json.RawMessage(`[
+		{"identifier":"locations","role":"SENDER","url":"http://evolt/cpo/locations"},
+		{"identifier":"locations","role":"RECEIVER","url":"http://evolt/emsp/locations"},
+		{"identifier":"tariffs","role":"sender","url":"http://evolt/cpo/tariffs"}
+	]`)}
+
+	cases := []struct {
+		name, identifier, role, want string
+		wantErr                      bool
+	}{
+		{"sender picked over receiver", "locations", "SENDER", "http://evolt/cpo/locations", false},
+		{"receiver picked over sender", "locations", "RECEIVER", "http://evolt/emsp/locations", false},
+		{"role match is case-insensitive", "tariffs", "SENDER", "http://evolt/cpo/tariffs", false},
+		{"missing role", "tariffs", "RECEIVER", "", true},
+		{"missing identifier", "cdrs", "SENDER", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := c.endpointURL(reg, tc.identifier, tc.role)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("url = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	if _, err := c.endpointURL(store.Registration{Endpoints: json.RawMessage(`{bad`)}, "locations", "SENDER"); err == nil {
+		t.Fatal("unreadable endpoints must error")
 	}
 }

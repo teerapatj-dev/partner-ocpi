@@ -1,0 +1,9 @@
+{
+	auto_https off
+}
+
+:80 {
+	reverse_proxy orch-ocpi-service-internal.dev.evtech.dev:80 {
+		header_up Host orch-ocpi-service-internal.dev.evtech.dev
+	}
+}

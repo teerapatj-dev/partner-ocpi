@@ -52,6 +52,7 @@ func New(cfg config.Config, st *store.Store) *Client {
 type callResult struct {
 	HTTPStatus int
 	Body       []byte
+	Header     http.Header
 }
 
 func (c *Client) do(ctx context.Context, method, url, token string, body any, toCC, toPID string) (callResult, error) {
@@ -115,7 +116,7 @@ func (c *Client) do(ctx context.Context, method, url, token string, body any, to
 	if err != nil {
 		return callResult{}, fmt.Errorf("read response of %s %s: %w", method, url, err)
 	}
-	return callResult{HTTPStatus: resp.StatusCode, Body: respBody}, nil
+	return callResult{HTTPStatus: resp.StatusCode, Body: respBody, Header: resp.Header}, nil
 }
 
 // flexEnvelope covers both the OCPI envelope (status_code int) and Evolt's
@@ -373,7 +374,7 @@ type PushResult struct {
 	Accepted       bool   `json:"accepted"`
 }
 
-func (c *Client) receiverURL(reg store.Registration, identifier string) (string, error) {
+func (c *Client) endpointURL(reg store.Registration, identifier, role string) (string, error) {
 	var endpoints []ocpi.Endpoint
 	if len(reg.Endpoints) > 0 {
 		if err := json.Unmarshal(reg.Endpoints, &endpoints); err != nil {
@@ -381,11 +382,15 @@ func (c *Client) receiverURL(reg store.Registration, identifier string) (string,
 		}
 	}
 	for _, ep := range endpoints {
-		if strings.EqualFold(ep.Identifier, identifier) && strings.EqualFold(ep.Role, "RECEIVER") {
+		if strings.EqualFold(ep.Identifier, identifier) && strings.EqualFold(ep.Role, role) {
 			return ep.URL, nil
 		}
 	}
-	return "", fmt.Errorf("counterparty has no %s RECEIVER endpoint (callback may have been skipped)", identifier)
+	return "", fmt.Errorf("counterparty has no %s %s endpoint (callback may have been skipped)", identifier, role)
+}
+
+func (c *Client) receiverURL(reg store.Registration, identifier string) (string, error) {
+	return c.endpointURL(reg, identifier, "RECEIVER")
 }
 
 func (c *Client) pushObject(ctx context.Context, method, identifier, suffix string, body any) (PushResult, error) {
@@ -410,6 +415,10 @@ func (c *Client) pushObject(ctx context.Context, method, identifier, suffix stri
 	return PushResult{URL: url, HTTPStatus: res.HTTPStatus, OCPIStatusCode: code, Accepted: accepted}, nil
 }
 
+func (c *Client) PushLocation(ctx context.Context, locationID string, payload json.RawMessage) (PushResult, error) {
+	return c.pushObject(ctx, http.MethodPut, "locations", "/"+locationID, payload)
+}
+
 func (c *Client) PushEvseStatus(ctx context.Context, locationID, evseUID, status string) (PushResult, error) {
 	body := map[string]string{"status": status, "last_updated": ocpi.Now()}
 	return c.pushObject(ctx, http.MethodPatch, "locations", "/"+locationID+"/"+evseUID, body)
@@ -421,4 +430,44 @@ func (c *Client) PushTariff(ctx context.Context, tariffID string, payload json.R
 
 func (c *Client) DeleteTariff(ctx context.Context, tariffID string) (PushResult, error) {
 	return c.pushObject(ctx, http.MethodDelete, "tariffs", "/"+tariffID, nil)
+}
+
+type PullResult struct {
+	URL            string          `json:"url"`
+	HTTPStatus     int             `json:"http_status"`
+	OCPIStatusCode int             `json:"ocpi_status_code"`
+	Total          *int            `json:"total,omitempty"`
+	Items          json.RawMessage `json:"items,omitempty"`
+}
+
+// PullFromCounterparty GETs the first page of the counterparty's SENDER list
+// (locations or tariffs) with the outbound token — the same request Evolt's
+// future pull cron will make against us, pointed the other way.
+func (c *Client) PullFromCounterparty(ctx context.Context, identifier string, limit int) (PullResult, error) {
+	reg, err := c.st.FirstRegistered(ctx)
+	if err != nil {
+		return PullResult{}, fmt.Errorf("no REGISTERED counterparty: %w", err)
+	}
+	base, err := c.endpointURL(reg, identifier, "SENDER")
+	if err != nil {
+		return PullResult{}, err
+	}
+	url := fmt.Sprintf("%s?offset=0&limit=%d", strings.TrimRight(base, "/"), limit)
+	res, err := c.do(ctx, http.MethodGet, url, reg.TokenOutbound, nil, reg.CountryCode, reg.PartyID)
+	if err != nil {
+		return PullResult{URL: url}, err
+	}
+	out := PullResult{URL: url, HTTPStatus: res.HTTPStatus}
+	out.OCPIStatusCode, _ = parseAnyStatus(res.Body)
+	if v := res.Header.Get("X-Total-Count"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			out.Total = &n
+		}
+	}
+	var items json.RawMessage
+	if err := parseEnvelope(res, &items); err != nil {
+		return out, fmt.Errorf("parse %s page: %w", identifier, err)
+	}
+	out.Items = items
+	return out, nil
 }

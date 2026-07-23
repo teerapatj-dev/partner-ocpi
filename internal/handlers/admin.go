@@ -118,6 +118,75 @@ func (h *Handlers) AdminPushTariff(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+type pushLocationRequest struct {
+	LocationID string `json:"location_id"`
+}
+
+func (h *Handlers) AdminPushLocation(c echo.Context) error {
+	var req pushLocationRequest
+	if err := c.Bind(&req); err != nil || req.LocationID == "" {
+		return adminErr(c, http.StatusBadRequest, "location_id is required")
+	}
+	ctx := c.Request().Context()
+	payload, err := h.st.GetOwn(ctx, "own_locations", req.LocationID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return adminErr(c, http.StatusNotFound, "unknown location_id")
+		}
+		return adminErr(c, http.StatusInternalServerError, "location lookup failed")
+	}
+	result, err := h.cl.PushLocation(ctx, req.LocationID, payload)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": result})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+type pullRequest struct {
+	Limit int `json:"limit"`
+}
+
+func (h *Handlers) AdminPullCounterparty(c echo.Context) error {
+	kind := c.Param("kind")
+	if kind != "locations" && kind != "tariffs" {
+		return adminErr(c, http.StatusBadRequest, "kind must be locations or tariffs")
+	}
+	var req pullRequest
+	if err := c.Bind(&req); err != nil {
+		return adminErr(c, http.StatusBadRequest, "invalid body")
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	result, err := h.cl.PullFromCounterparty(c.Request().Context(), kind, limit)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": result})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// AdminCurrentTokens returns the raw token pair. The demo backend needs the
+// inbound token to stand in for Evolt's not-yet-built pull cron when calling
+// the adapter; it stays inside the docker network, never in a browser.
+func (h *Handlers) AdminCurrentTokens(c echo.Context) error {
+	regs, err := h.st.ListRegistrations(c.Request().Context())
+	if err != nil {
+		return adminErr(c, http.StatusInternalServerError, "list registrations failed")
+	}
+	if len(regs) == 0 {
+		return adminErr(c, http.StatusNotFound, "no registration")
+	}
+	return c.JSON(http.StatusOK, map[string]string{
+		"status":         regs[0].Status,
+		"token_inbound":  regs[0].TokenInbound,
+		"token_outbound": regs[0].TokenOutbound,
+	})
+}
+
 func (h *Handlers) AdminDeleteTariffPush(c echo.Context) error {
 	result, err := h.cl.DeleteTariff(c.Request().Context(), c.Param("tariff_id"))
 	if err != nil {
