@@ -30,12 +30,17 @@ services:
     ports:
       - "9100:8080"
 
-  # Publishes the demo on the permanent hostname. Create a remotely-managed
-  # tunnel in the Cloudflare Zero Trust dashboard, point its public hostname at
-  # http://demo:8080, and put the token in .env.demo.
+  # Only needed when cloudflared is NOT installed on the host. The dashboard's
+  # install command registers a launchd/systemd service that survives reboots,
+  # which is the better setup — in that case point the tunnel's public hostname
+  # at http://localhost:9100 and leave this profile off. Running both replicas
+  # is what breaks: they share one route, and only one of the two addresses
+  # (localhost:9100 vs demo:8080) resolves per replica.
+  #   docker compose --profile tunnel ... up   → run it here instead
   cloudflared:
+    profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env.demo}
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
     depends_on:
       - demo
     restart: unless-stopped
