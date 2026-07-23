@@ -27,6 +27,9 @@ services:
       DEMO_KAFKA_STATION_ID: ${DEMO_KAFKA_STATION_ID:-}
       DEMO_KAFKA_EVSE_UID: ${DEMO_KAFKA_EVSE_UID:-}
       DEMO_KAFKA_EVSE_ID: ${DEMO_KAFKA_EVSE_ID:-}
+      # Evolt's CPO tariffs feed builds every object before paging, so one page
+      # costs ~19s no matter the limit. The chain has to outlast that.
+      DEMO_TIMEOUT_SECONDS: ${DEMO_TIMEOUT_SECONDS:-60}
     ports:
       - "9100:8080"
 
@@ -61,3 +64,4 @@ services:
   plugsiam:
     environment:
       BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:9101}
+      OUTBOUND_TIMEOUT_SECONDS: ${MOCK_OUTBOUND_TIMEOUT_SECONDS:-45}
