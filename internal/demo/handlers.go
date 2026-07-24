@@ -18,14 +18,15 @@ var evseStatuses = map[string]bool{
 }
 
 type Handlers struct {
-	cfg   Config
-	mock  *MockAdmin
-	evolt *Evolt
-	kafka *Kafka
+	cfg     Config
+	mock    *MockAdmin
+	evolt   *Evolt
+	kafka   *Kafka
+	charger *ChargerDB // nil when the charger simulator is not configured
 }
 
-func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka) *Handlers {
-	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka}
+func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka, charger *ChargerDB) *Handlers {
+	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger}
 }
 
 func ok(c echo.Context, data any) error {
@@ -447,13 +448,30 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
+
+	// Flip the demo EVSE online first so Evolt derives the picked status instead of UNKNOWN. Without
+	// the simulator the event still fires, but the pushed status is whatever the DB already holds.
+	simulated := false
+	if h.charger != nil {
+		if _, err := h.charger.SimulateOnline(ctx, req.Status); err != nil {
+			return fail(c, http.StatusBadGateway, "charger simulate failed: "+err.Error(), nil)
+		}
+		simulated = true
+	}
+
 	if err := h.kafka.ProduceEvseStatus(ctx, req.Status); err != nil {
 		return fail(c, http.StatusBadGateway, err.Error(), nil)
 	}
+	note := "consumer should PATCH the mock within ~5s — watch the request log"
+	if !simulated {
+		note += " · status will show UNKNOWN (charger simulator off: set EVOLT_DB_DSN)"
+	}
 	return ok(c, map[string]any{
-		"produced":        true,
-		"baseline_seeded": seeded,
-		"note":            "consumer should PATCH the mock within ~5s — watch the request log",
+		"produced":         true,
+		"baseline_seeded":  seeded,
+		"simulated_status": req.Status,
+		"charger_online":   simulated,
+		"note":             note,
 	})
 }
 

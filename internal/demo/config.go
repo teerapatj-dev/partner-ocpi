@@ -42,6 +42,11 @@ type Config struct {
 	KafkaPartyCC     string
 	KafkaPartyID     string
 
+	// EvoltDBDSN + KafkaEvseID drive the demo-only charger simulator: when set, the evse-status flow
+	// flips the one configured EVSE online in Evolt's DB so the pushed status is a real value, not the
+	// UNKNOWN a dev charger reports. Empty DSN = feature off (status stays whatever the DB holds).
+	EvoltDBDSN string
+
 	RatePostPer10s int
 	RateGetPer10s  int
 	Timeout        time.Duration
@@ -68,6 +73,7 @@ func Load() (Config, error) {
 		KafkaEvseUID:     os.Getenv("DEMO_KAFKA_EVSE_UID"),
 		KafkaEvseID:      os.Getenv("DEMO_KAFKA_EVSE_ID"),
 		KafkaOCPIEvseUID: os.Getenv("DEMO_KAFKA_OCPI_EVSE_UID"),
+		EvoltDBDSN:       os.Getenv("EVOLT_DB_DSN"),
 		KafkaPartyCC:     getenv("DEMO_KAFKA_PARTY_CC", "TH"),
 		KafkaPartyID:     getenv("DEMO_KAFKA_PARTY_ID", "EVO"),
 		RatePostPer10s:   intenv("DEMO_RATE_POST_PER_10S", 10),
