@@ -179,8 +179,8 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
       </div>
     </div>
     <div class="act" style="margin-top:12px"><span class="lbl">รีเซ็ตทะเบียน (partner)</span>
-      <button class="danger" onclick="if(confirm('ล้างทะเบียนของ PlugSiam ฝั่ง partner?\n\nEvolt จะยังจำไว้ (ไม่มี DELETE /credentials ตาม spec) — ต้องล้างฝั่ง Evolt แยก'))runFlow('unregister',this)">ยกเลิกทะเบียน</button>
-      <span class="mini">ล้างเฉพาะฝั่ง PlugSiam — Evolt ยังจำไว้ (spec ไม่มี DELETE)</span></div>
+      <button class="danger" onclick="if(confirm('ล้างทะเบียน + ข้อมูลของ PlugSiam ฝั่ง partner?\n\n• ลบทะเบียน + เคลียร์ received_* / log แล้ว seed own ใหม่ (เริ่มสะอาด)\n• Evolt จะยังจำไว้ (ไม่มี DELETE /credentials ตาม spec) — ต้องล้างฝั่ง Evolt แยก'))runFlow('unregister',this)">ยกเลิกทะเบียน + ล้าง DB</button>
+      <span class="mini">ลบทะเบียน + เคลียร์ received/log ฝั่ง PlugSiam แล้ว seed ใหม่ · Evolt ยังจำไว้ (spec ไม่มี DELETE)</span></div>
   </section>
 
   <!-- LOCATION -->
@@ -258,7 +258,9 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
 
   <!-- request log -->
   <section>
-    <h2>📜 Request log ของ partner (OCPI จริง วิ่งเข้า-ออก PlugSiam) <span class="badge" style="font-weight:400">เวลาไทย · คลิกแถวดูรายละเอียด</span></h2>
+    <h2>📜 Request log ของ partner (OCPI จริง วิ่งเข้า-ออก PlugSiam)
+      <span class="badge" style="font-weight:400">เวลาไทย · คลิกแถวดูรายละเอียด</span>
+      <button class="ghost" style="margin-left:auto" onclick="clearLog(this)">🧹 เคลียร์ log</button></h2>
     <div class="counts" id="counts"></div>
     <div class="logwrap"><table id="log">
       <thead><tr><th>เวลา (ไทย)</th><th>ทิศ</th><th>method</th><th>path</th><th>HTTP</th><th>OCPI</th><th>คู่สนทนา</th></tr></thead>
@@ -323,8 +325,8 @@ const FLOWS={
     steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง']},
   'partner-init':{title:'Handshake — Partner เริ่ม (PlugSiam → Evolt)',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/partner-init',
     steps:['mock ขอ Token A จาก orch','mock GET Evolt /versions','mock GET version details /2.2.1','mock POST /credentials → Evolt (แลก Token C)','Evolt callback ← mock /versions','ทะเบียน REGISTERED สองฝั่ง']},
-  'unregister':{title:'ยกเลิกทะเบียนฝั่ง partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
-    steps:['ล้าง registration ใน mock DB','(Evolt ยังจำไว้ — ไม่มี DELETE /credentials)']},
+  'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB ฝั่ง partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
+    steps:['ลบ registration ใน mock DB','เคลียร์ received_* + request log','seed own catalog ใหม่ (เริ่มสะอาด)','(Evolt ยังจำไว้ — ไม่มี DELETE /credentials)']},
 
   // Roaming In (เราเป็น CPO)
   'in-loc-pull':{title:'Roaming In · Location — partner ดึง locations ของเรา',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/pull/locations',body:{limit:5},
@@ -548,6 +550,13 @@ async function refreshMirror(){
     (d.notes||[]).forEach(n=>html.push(`<div class="note">⚠️ ${esc(n)}</div>`));
     $('pane-out').innerHTML=html.join('');
   }catch(e){}
+}
+
+async function clearLog(btn){
+  const html=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>เคลียร์…';
+  try{await api('/api/demo/requests/clear',{method:'POST'})}catch(e){}
+  btn.disabled=false;btn.innerHTML=html;
+  lastInbound=null;refreshLog();refreshPartnerData();
 }
 
 let logRows=[];

@@ -522,7 +522,26 @@ func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
 // clean handshake. Evolt keeps its own record — it implements no DELETE
 // /credentials — so that side is cleared separately.
 func (h *Handlers) Unregister(c echo.Context) error {
-	result, err := h.mock.Delete(c.Request().Context(), "/admin/registrations")
+	ctx := c.Request().Context()
+	deleted, err := h.mock.Delete(ctx, "/admin/registrations")
+	if err != nil {
+		return failFrom(c, err)
+	}
+	// Also wipe the partner's roaming data (received_* + log) and re-seed its own catalog, so the next
+	// demo run starts from a clean slate rather than the previous run's leftovers.
+	reset, err := h.mock.Post(ctx, "/admin/seed/reset", nil)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, map[string]any{
+		"registration": json.RawMessage(deleted),
+		"data_reset":   json.RawMessage(reset),
+	})
+}
+
+// ClearRequests empties just the partner's request log (own/received data untouched).
+func (h *Handlers) ClearRequests(c echo.Context) error {
+	result, err := h.mock.Delete(c.Request().Context(), "/admin/requests")
 	if err != nil {
 		return failFrom(c, err)
 	}

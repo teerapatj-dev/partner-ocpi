@@ -83,6 +83,7 @@ func New(cfg config.Config, st *store.Store, cl *client.Client) *echo.Echo {
 	admin.GET("/received/:kind", h.AdminReceived)
 	admin.POST("/received/locations", h.AdminInjectLocation)
 	admin.GET("/requests", h.AdminRequests)
+	admin.DELETE("/requests", h.AdminClearRequests)
 	admin.POST("/seed/reset", h.AdminSeedReset)
 
 	return e

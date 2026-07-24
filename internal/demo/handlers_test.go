@@ -581,24 +581,45 @@ func TestOcpiProxyRejectsDotSegments(t *testing.T) {
 }
 
 func TestUnregister(t *testing.T) {
-	called := false
+	deleted, reset := false, false
 	mock := fakeMock(t, map[string]http.HandlerFunc{
 		"DELETE /admin/registrations": func(w http.ResponseWriter, _ *http.Request) {
-			called = true
+			deleted = true
 			w.Write([]byte(`{"deleted":1}`))
+		},
+		"POST /admin/seed/reset": func(w http.ResponseWriter, _ *http.Request) {
+			reset = true
+			w.Write([]byte(`{"reset":true,"seeded_objects":7}`))
 		},
 	})
 	h := newHandlers(t, Config{}, mock, nil)
 	rec := doReq(t, h.Unregister, http.MethodPost, "/api/demo/unregister", "")
 	got := decode(t, rec)
-	if rec.Code != http.StatusOK || !got.ok || !called {
-		t.Fatalf("unregister failed: %d called=%v %s", rec.Code, called, rec.Body.String())
+	// Unregister must both drop the registration AND wipe the partner data for a clean next run.
+	if rec.Code != http.StatusOK || !got.ok || !deleted || !reset {
+		t.Fatalf("unregister failed: %d deleted=%v reset=%v %s", rec.Code, deleted, reset, rec.Body.String())
 	}
 
 	down := newHandlers(t, Config{}, nil, nil)
 	rec = doReq(t, down.Unregister, http.MethodPost, "/", "")
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("mock down must 502, got %d", rec.Code)
+	}
+}
+
+func TestClearRequests(t *testing.T) {
+	called := false
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"DELETE /admin/requests": func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.Write([]byte(`{"cleared":true}`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+	rec := doReq(t, h.ClearRequests, http.MethodPost, "/api/demo/requests/clear", "")
+	got := decode(t, rec)
+	if rec.Code != http.StatusOK || !got.ok || !called {
+		t.Fatalf("clear requests failed: %d called=%v %s", rec.Code, called, rec.Body.String())
 	}
 }
 

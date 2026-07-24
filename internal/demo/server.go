@@ -54,6 +54,7 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.POST("/handshake/partner-init", h.PartnerInitHandshake)
 	api.POST("/handshake/evolt-init", h.EvoltInitHandshake)
 	api.POST("/unregister", h.Unregister)
+	api.POST("/requests/clear", h.ClearRequests)
 	api.POST("/push/location", h.PushLocation)
 	api.POST("/push/evse-status", h.PushEvseStatus)
 	api.POST("/push/tariff", h.PushTariff)
