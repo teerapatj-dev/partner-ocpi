@@ -157,14 +157,28 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
   </section>
 
   <!-- handshake -->
-  <section>
-    <h2><span class="dot" style="background:var(--blue)"></span> ขั้นที่ 1 · Handshake (Credentials) <span class="cardtag">EV-1321</span></h2>
-    <p class="hint">แลก Token A/B/C ตาม OCPI 2.2.1 §7 — ต้องทำก่อนถึงจะ roaming ได้ทั้งสองทิศ · Evolt มีแค่ POST (ไม่มี PUT/DELETE ตาม spec)</p>
-    <div class="row">
-      <button onclick="runFlow('evolt-init',this)">▶ ให้ Evolt เริ่ม (แนะนำ)</button>
-      <button class="secondary" onclick="runFlow('partner-init',this)">Partner เริ่ม (PlugSiam → Evolt)</button>
-      <button class="danger" onclick="if(confirm('ล้างทะเบียนของ PlugSiam ฝั่ง partner?\n\nEvolt จะยังจำไว้ (ไม่มี DELETE /credentials ตาม spec)'))runFlow('unregister',this)">ยกเลิกทะเบียน (partner)</button>
+  <section class="rsec" style="border-left-color:var(--blue)">
+    <h2><span class="rtag" style="color:#08101f;background:var(--blue)">ขั้นที่ 1</span> Handshake (Credentials) <span class="cardtag">EV-1321</span> <span class="mini" style="margin:0">— ต้องทำก่อน ถึงจะ roaming ได้ทั้งสองทิศ</span></h2>
+    <p class="hint">แลก Token A/B/C ตาม OCPI 2.2.1 §7 · ฝ่ายที่ "เริ่ม" คือฝ่ายที่ยิง versions→details→credentials เข้าหาอีกฝ่าย</p>
+    <div class="mods">
+      <div class="subsec">
+        <h3>▶ ทิศ A — Evolt เริ่ม <span class="cardtag">แนะนำ</span></h3>
+        <p class="mini">Evolt (orch) เดิน handshake เข้าหา PlugSiam · orch อยู่ในคลัสเตอร์ resolve ได้เสมอ → ใช้งานได้จริงตอนนี้</p>
+        <div class="act"><span class="lbl">Evolt → PlugSiam</span>
+          <button onclick="runFlow('evolt-init',this)">▶ ให้ Evolt เริ่ม</button></div>
+        <span class="mini mono">Evolt ─(Token A/B/C)→ PlugSiam · จบ = REGISTERED ทั้งสองฝั่ง</span>
+      </div>
+      <div class="subsec">
+        <h3>ทิศ B — Partner เริ่ม</h3>
+        <p class="mini">PlugSiam เดิน handshake เข้าหา Evolt (GET versions → GET details → POST credentials)</p>
+        <div class="act"><span class="lbl">PlugSiam → Evolt</span>
+          <button class="secondary" onclick="runFlow('partner-init',this)">Partner เริ่ม</button></div>
+        <span class="mini" style="color:var(--amber)">⚠️ รอ Evolt แก้ Vault base_url ก่อน (ตอนนี้ยัง 502 — Evolt แจก URL svc.cluster.local)</span>
+      </div>
     </div>
+    <div class="act" style="margin-top:12px"><span class="lbl">รีเซ็ตทะเบียน (partner)</span>
+      <button class="danger" onclick="if(confirm('ล้างทะเบียนของ PlugSiam ฝั่ง partner?\n\nEvolt จะยังจำไว้ (ไม่มี DELETE /credentials ตาม spec) — ต้องล้างฝั่ง Evolt แยก'))runFlow('unregister',this)">ยกเลิกทะเบียน</button>
+      <span class="mini">ล้างเฉพาะฝั่ง PlugSiam — Evolt ยังจำไว้ (spec ไม่มี DELETE)</span></div>
   </section>
 
   <!-- ROAMING IN -->
@@ -225,16 +239,16 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
   <!-- data panels -->
   <section>
     <h2>📦 ข้อมูลจริงที่แต่ละฝั่งถืออยู่ <span class="badge" style="font-weight:400">อัปเดตอัตโนมัติ · ค่าที่เปลี่ยนกะพริบส้ม</span></h2>
-    <p class="hint">"ของจริงในระบบ" ไม่ใช่ผลตอบ HTTP — ไม่ต้องเปิด DB · กด <b>ดู JSON</b> เพื่อดู payload เต็ม</p>
+    <p class="hint">"ของจริงในระบบ" ไม่ใช่ผลตอบ HTTP — ไม่ต้องเปิด DB · <b>ซ้าย = DB ของ PlugSiam</b> · <b>ขวา = DB ของ Evolt</b> · กด <b>ดู JSON</b> เพื่อดู payload เต็ม</p>
     <div class="mirror">
       <div class="pane in">
-        <h3><span class="rtag in">IN</span> ผล Roaming In — ข้อมูลของเราที่ partner ได้รับ</h3>
-        <p class="sub">mock (PlugSiam) เก็บอะไรที่ Evolt ส่ง/ให้ดึงไป — คือหน้าจอที่ partner จริงจะเห็น</p>
+        <h3>🟩 DB ฝั่ง <b style="color:var(--in)">PlugSiam (partner)</b> <span class="rtag in">ผล Roaming In</span></h3>
+        <p class="sub">เก็บ <b>ข้อมูลของ Evolt</b> (party TH/EVT) ที่ push/ให้ดึงเข้ามา — คือหน้าจอที่ partner จริงเห็น · ตาราง <span class="mono">received_*</span> ของ mock</p>
         <div id="pane-in"></div>
       </div>
       <div class="pane out">
-        <h3><span class="rtag out">OUT</span> ผล Roaming Out — ข้อมูล partner ที่ Evolt เก็บ</h3>
-        <p class="sub">อ่านกลับจาก <span class="mono">ocpi_partner_*</span> ของ Evolt — พิสูจน์ว่า push/pull เข้าจริง ไม่ใช่แค่ตอบ 1000</p>
+        <h3>🟪 DB ฝั่ง <b style="color:var(--out)">Evolt</b> <span class="rtag out">ผล Roaming Out</span></h3>
+        <p class="sub">เก็บ <b>ข้อมูลของ PlugSiam</b> (party TH/PLG) ที่ partner push/เรา pull เข้ามา — ตาราง <span class="mono">ocpi_partner_*</span> ของ Evolt</p>
         <div id="pane-out"></div>
       </div>
     </div>
@@ -468,8 +482,8 @@ async function refreshPartnerData(){
     const evsesByLoc={};
     ((locs.data||{}).evses||[]).forEach(e=>{const loc=(e.key||'').split('/')[0];(evsesByLoc[loc]=evsesByLoc[loc]||[]).push(e)});
     const locations=(locs.data||{}).locations||[];
-    html.push('<div class="mini" style="margin:2px 0 6px">🔌 สถานี + สถานะหัวชาร์จ</div>');
-    if(!locations.length)html.push('<div class="empty">ยังไม่มีข้อมูลจาก Evolt<br>กด Roaming In · Location (ดึง / ยิง event)</div>');
+    html.push('<div class="mini" style="margin:2px 0 6px">🔌 สถานีของ <b style="color:var(--in)">Evolt</b> + สถานะหัวชาร์จ <span class="mono">(party ในข้อมูล = TH/EVT)</span></div>');
+    if(!locations.length)html.push('<div class="empty">ยังไม่มีข้อมูลของ Evolt ที่นี่<br>กด Roaming In · Location (ดึง / ยิง event)</div>');
     locations.forEach(l=>{
       const p=asObj(l.payload);
       const chips=(evsesByLoc[l.key]||[]).map(e=>{
@@ -484,8 +498,8 @@ async function refreshPartnerData(){
         `<div class="when" style="margin-top:6px">อัปเดตล่าสุด: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
     });
     const tariffs=(trfs.data||{}).tariffs||[];
-    html.push('<div class="mini" style="margin:12px 0 6px">💰 ราคาที่ Evolt ส่งมา</div>');
-    if(!tariffs.length)html.push('<div class="empty">ยังไม่มี tariff จาก Evolt<br>กด Roaming In · Tariff (สั่ง push)</div>');
+    html.push('<div class="mini" style="margin:12px 0 6px">💰 ราคาของ <b style="color:var(--in)">Evolt</b> ที่ push มา</div>');
+    if(!tariffs.length)html.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (สั่ง push)</div>');
     tariffs.forEach(t=>{
       const p=asObj(t.payload),f=changed('rtrf:'+t.key,JSON.stringify(p.elements||[])+t.last_updated)?' flash':'';
       const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
@@ -511,9 +525,9 @@ async function refreshMirror(){
     if(!d.registered){
       html.push(`<div class="empty">Evolt ยังไม่รู้จัก ${esc(d.country_code+'/'+d.party_id)}<br>กด Handshake ก่อน</div>`);
     }else{
-      html.push(`<div class="item"><div class="kv"><span>ทะเบียนฝั่ง Evolt</span><span style="color:var(--green)">✓ REGISTERED</span></div>`+
-        `<div class="kv"><span>credentials_id</span><span class="mono">${esc(d.credentials_id)}</span></div></div>`);
-      [['locations','🔌 Locations ที่ Evolt รับไว้','EV-1561'],['tariffs','💰 Tariffs ที่ Evolt รับไว้','EV-1585']].forEach(([k,label,card])=>{
+      html.push(`<div class="item"><div class="kv"><span>ทะเบียน PlugSiam ในระบบ Evolt</span><span style="color:var(--green)">✓ REGISTERED</span></div>`+
+        `<div class="kv"><span>credentials_id ที่ Evolt ออกให้</span><span class="mono">${esc(d.credentials_id)}</span></div></div>`);
+      [['locations','🔌 Locations ของ PlugSiam ที่ Evolt เก็บ','EV-1561'],['tariffs','💰 Tariffs ของ PlugSiam ที่ Evolt เก็บ','EV-1585']].forEach(([k,label,card])=>{
         const w=(d[k]||{}).date_from,f=changed('wm:'+k,String(w))?' flash':'';
         html.push(`<div class="item${f}"><div class="top"><span class="name">${label} <span class="cardtag">${card}</span></span>`+
           `<span class="when">${w?esc(ago(w)):'—'}</span></div>`+
@@ -521,7 +535,7 @@ async function refreshMirror(){
       });
       if(d.tariff){
         const p=asObj(d.tariff),f=changed('mtrf:'+d.tariff_id,JSON.stringify(p))?' flash':'';
-        html.push(`<div class="item${f}"><div class="top"><span class="name">อ่านกลับ tariff ที่ push ไป</span>`+
+        html.push(`<div class="item${f}"><div class="top"><span class="name">💰 ราคาของ PlugSiam ที่ Evolt เก็บ (อ่านกลับ)</span>`+
           `<span class="when"><button class="ghost" onclick='showJSON("evolt stored tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
           priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
           `<div class="when mono" style="margin-top:6px">${esc(d.tariff_id)}</div></div>`);
