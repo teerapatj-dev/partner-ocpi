@@ -52,6 +52,8 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 .mods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:900px){.mods{grid-template-columns:1fr}}
 .subsec{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px}
+.subsec.in{border-left:3px solid var(--in)}
+.subsec.out{border-left:3px solid var(--out)}
 .subsec h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cardtag{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:ui-monospace,monospace}
 .mini{color:var(--muted);font-size:11.5px;margin:0 0 8px}
@@ -147,7 +149,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
   <!-- diagram legend -->
   <section>
     <h2>🗺️ อ่านแผนภาพก่อน — Roaming มี 2 ทิศ</h2>
-    <p class="hint">แยกตาม "ใครเอา driver ไปชาร์จที่ตู้ใคร" ตาม sequence diagram ของทีม (EV-1377) — สีเดียวกับปุ่มด้านล่าง</p>
+    <p class="hint">แยกตาม "ใครเอา driver ไปชาร์จที่ตู้ใคร" ตาม sequence diagram ของทีม (EV-1377) · ทุก module ด้านล่าง (Location/Tariff) แบ่ง <b style="color:var(--in)">In = ซ้าย/เขียว</b> · <b style="color:var(--out)">Out = ขวา/ม่วง</b> เหมือนกันหมด</p>
     <div class="legend">
       <div class="leg in"><b style="color:var(--in)">🟢 Roaming In</b> — Evolt เป็น <b>CPO</b> เปิดข้อมูลตู้ตัวเองให้ partner · <b>driver ของ partner</b> มาชาร์จที่ตู้เรา
         <span class="arrow">partner ─GET /cpo/…→ Evolt (ดึง) · Evolt ─push→ partner (สถานะ/ราคาเปลี่ยน)</span></div>
@@ -181,38 +183,22 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
       <span class="mini">ล้างเฉพาะฝั่ง PlugSiam — Evolt ยังจำไว้ (spec ไม่มี DELETE)</span></div>
   </section>
 
-  <!-- ROAMING IN -->
-  <section class="rsec in">
-    <h2><span class="rtag in">ROAMING IN</span> Evolt เปิดข้อมูลตัวเองให้ partner <span class="mini" style="margin:0">(เราเป็น CPO — partner ดึง / เรา push ให้)</span></h2>
+  <!-- LOCATION -->
+  <section class="rsec" style="border-left-color:var(--blue)">
+    <h2>🔌 Location <span class="cardtag">EV-1560 · EV-1561</span> <span class="mini" style="margin:0">— แลกข้อมูลสถานี/สถานะหัวชาร์จ · ซ้าย = In · ขวา = Out</span></h2>
     <div class="mods">
-      <div class="subsec">
-        <h3>🔌 Location <span class="cardtag">EV-1560</span></h3>
-        <p class="mini">ผลลัพธ์ไปโผล่ที่แผง <b style="color:var(--in)">ผล Roaming In</b> ด้านล่าง (ข้อมูลที่ partner ได้รับ)</p>
+      <div class="subsec in">
+        <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดตู้ตัวเองให้ partner <span class="cardtag">EV-1560</span></h3>
+        <p class="mini">เราเป็น CPO — partner ดึง / เรา push ให้ · ผลไปแผง <b style="color:var(--in)">ซ้ายล่าง (DB PlugSiam)</b></p>
         <div class="act"><span class="lbl">partner ดึง locations</span>
           <button class="in" onclick="runFlow('in-loc-pull',this)">ดึง (GET /cpo)</button></div>
         <div class="act"><span class="lbl">เรา push สถานะตู้</span>
           <select id="sel-kafka-status"><option>AVAILABLE</option><option>CHARGING</option><option>OUTOFORDER</option></select>
           <button class="in" id="btn-kafka" onclick="runFlow('in-loc-push-status',this)">ยิง event (Kafka→PATCH)</button></div>
       </div>
-      <div class="subsec">
-        <h3>💰 Tariff <span class="cardtag">EV-1584</span></h3>
-        <p class="mini">pull = อ่านราคาต้นทางสด·แปลงทันที (ราคาที่ partner ได้ = จริงเสมอ)</p>
-        <div class="act"><span class="lbl">partner ดึง tariffs</span>
-          <button class="in" onclick="runFlow('in-trf-pull',this)">ดึง (GET /cpo)</button></div>
-        <div class="act"><span class="lbl">เรา push tariff (fanout)</span>
-          <select id="sel-station"></select>
-          <button class="in" onclick="runFlow('in-trf-push',this)">สั่ง push</button></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ROAMING OUT -->
-  <section class="rsec out">
-    <h2><span class="rtag out">ROAMING OUT</span> Evolt รับข้อมูลตู้ partner <span class="mini" style="margin:0">(เราเป็น eMSP — partner ยัดเข้า / เรา pull เข้า → <span class="mono">ocpi_partner_*</span>)</span></h2>
-    <div class="mods">
-      <div class="subsec">
-        <h3>🔌 Location <span class="cardtag">EV-1561</span></h3>
-        <p class="mini">ผลลัพธ์ไปโผล่ที่แผง <b style="color:var(--out)">ผล Roaming Out</b> ด้านล่าง (ข้อมูล partner ที่ Evolt เก็บ)</p>
+      <div class="subsec out">
+        <h3><span class="rtag out">ROAMING OUT</span> Evolt รับตู้ partner <span class="cardtag">EV-1561</span></h3>
+        <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_*</span> · ผลไปแผง <b style="color:var(--out)">ขวาล่าง (DB Evolt)</b></p>
         <div class="act"><span class="lbl">partner push location</span>
           <select id="sel-location"></select>
           <button class="out" onclick="runFlow('out-loc-push',this)">PUT</button></div>
@@ -223,9 +209,25 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <div class="act"><span class="lbl">เรา pull partner (cron)</span>
           <button class="out" onclick="runFlow('out-loc-pull',this)">ดึงผ่าน adapter</button></div>
       </div>
-      <div class="subsec">
-        <h3>💰 Tariff <span class="cardtag">EV-1585</span></h3>
-        <p class="mini">PUT = upsert · DELETE = soft-delete (ปั๊ก deleted_at)</p>
+    </div>
+  </section>
+
+  <!-- TARIFF -->
+  <section class="rsec" style="border-left-color:var(--blue)">
+    <h2>💰 Tariff <span class="cardtag">EV-1584 · EV-1585</span> <span class="mini" style="margin:0">— แลกข้อมูลราคา · ซ้าย = In · ขวา = Out</span></h2>
+    <div class="mods">
+      <div class="subsec in">
+        <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดราคาตัวเองให้ partner <span class="cardtag">EV-1584</span></h3>
+        <p class="mini">เราเป็น CPO · pull = อ่านต้นทางสด·แปลงทันที (ราคาที่ partner ได้ = จริงเสมอ) · ผลไปแผง <b style="color:var(--in)">ซ้ายล่าง</b></p>
+        <div class="act"><span class="lbl">partner ดึง tariffs</span>
+          <button class="in" onclick="runFlow('in-trf-pull',this)">ดึง (GET /cpo)</button></div>
+        <div class="act"><span class="lbl">เรา push tariff (fanout)</span>
+          <select id="sel-station"></select>
+          <button class="in" onclick="runFlow('in-trf-push',this)">สั่ง push</button></div>
+      </div>
+      <div class="subsec out">
+        <h3><span class="rtag out">ROAMING OUT</span> Evolt รับราคา partner <span class="cardtag">EV-1585</span></h3>
+        <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_tariffs</span> · PUT=upsert · DELETE=soft-delete · ผลไปแผง <b style="color:var(--out)">ขวาล่าง</b></p>
         <div class="act"><span class="lbl">partner push tariff</span>
           <select id="sel-tariff" onchange="refreshMirror()"></select>
           <button class="out" onclick="runFlow('out-trf-push',this)">PUT</button>
