@@ -65,9 +65,9 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.GET("/tables", h.Tables)
 	api.GET("/station-evses", h.StationEvses)
 	api.GET("/table/:table", h.BrowseTable)
-	api.POST("/evolt/pull/:kind", h.EvoltPull)
 	api.POST("/evolt/tariff-push", h.EvoltTariffPush)
 	api.POST("/evolt/tariff-backfill", h.EvoltTariffBackfill)
+	api.POST("/evolt/batch/:job", h.EvoltBatchRun)
 	api.POST("/evolt/evse-status-event", h.EvoltEvseStatusEvent)
 	api.POST("/reset", h.Reset)
 

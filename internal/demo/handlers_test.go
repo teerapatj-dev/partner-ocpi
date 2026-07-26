@@ -100,7 +100,7 @@ func newHandlers(t *testing.T, cfg Config, mockSrv, evoltSrv *httptest.Server) *
 			cfg.EvoltVersionsURL = evoltSrv.URL + "/api/ocpi/versions"
 		}
 	}
-	return NewHandlers(cfg, NewMockAdmin(cfg), NewEvolt(cfg), NewKafka(Config{}), nil, nil)
+	return NewHandlers(cfg, NewMockAdmin(cfg), NewEvolt(cfg), NewKafka(Config{}), nil, nil, nil)
 }
 
 const stateBody = `{"partner":{"name":"PlugSiam","party_id":"PLG","country_code":"TH"},"registration_status":"REGISTERED","counts":{"own_locations":4}}`
@@ -297,54 +297,6 @@ func TestPartnerPullValidation(t *testing.T) {
 	rec = doReq(t, h.PartnerPull, http.MethodPost, "/", `{"limit":-1}`, "kind", "locations")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("negative limit: %d", rec.Code)
-	}
-}
-
-func TestEvoltPullRequiresRegistration(t *testing.T) {
-	mock := fakeMock(t, map[string]http.HandlerFunc{
-		"GET /admin/tokens/current": jsonResp(`{"status":"PENDING","token_inbound":"x","token_outbound":""}`),
-	})
-	h := newHandlers(t, Config{}, mock, nil)
-	rec := doReq(t, h.EvoltPull, http.MethodPost, "/", `{}`, "kind", "locations")
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestEvoltPullHappy(t *testing.T) {
-	var pullReq map[string]any
-	evolt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/ocpi/tariffs/pull" {
-			http.NotFound(w, r)
-			return
-		}
-		pullReq = mustDecode(r)
-		// Real adapter contract: success is the bare pull response, no envelope.
-		w.Write([]byte(`{"http_status":200,"total_count":3,"body":{"data":[]},"next_url":""}`))
-	}))
-	mock := fakeMock(t, map[string]http.HandlerFunc{
-		"GET /admin/tokens/current": jsonResp(`{"status":"REGISTERED","token_inbound":"secret-inbound","token_outbound":"c"}`),
-	})
-	h := newHandlers(t, Config{PublicBaseURL: "https://demo.example.com"}, mock, evolt)
-	rec := doReq(t, h.EvoltPull, http.MethodPost, "/", `{"limit":3}`, "kind", "tariffs")
-	got := decode(t, rec)
-	if rec.Code != http.StatusOK || !got.ok {
-		t.Fatalf("pull failed: %d %s", rec.Code, rec.Body.String())
-	}
-	if pullReq["url"] != "https://demo.example.com/ocpi/cpo/2.2.1/tariffs" {
-		t.Fatalf("pull url = %v", pullReq["url"])
-	}
-	if pullReq["token"] != "secret-inbound" {
-		t.Fatal("inbound token not forwarded to adapter")
-	}
-	if pullReq["limit"] != float64(3) {
-		t.Fatalf("limit = %v, want number 3", pullReq["limit"])
-	}
-	if strings.Contains(rec.Body.String(), "secret-inbound") {
-		t.Fatal("inbound token leaked to the browser response")
-	}
-	if !strings.Contains(rec.Body.String(), `"total_count":3`) {
-		t.Fatalf("adapter payload not passed through: %s", rec.Body.String())
 	}
 }
 

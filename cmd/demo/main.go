@@ -55,7 +55,12 @@ func main() {
 		}
 	}
 
-	h := demo.NewHandlers(cfg, demo.NewMockAdmin(cfg), demo.NewEvolt(cfg), kafka, charger, browser)
+	batch := demo.NewBatchRunner(cfg)
+	if jobs := batch.Jobs(); len(jobs) > 0 {
+		log.Info().Strs("jobs", jobs).Msg("batch cron jobs mounted — Roaming Out cron buttons available")
+	}
+
+	h := demo.NewHandlers(cfg, demo.NewMockAdmin(cfg), demo.NewEvolt(cfg), kafka, charger, browser, batch)
 	e, err := demo.NewServer(cfg, h)
 	if err != nil {
 		log.Fatal().Err(err).Msg("build server")

@@ -2,3 +2,7 @@
 /bin/
 .env
 .env.demo
+
+# built by `make batch-jobs` from the sibling batch-ocpi-process repo
+/deploy/batch-jobs/*
+!/deploy/batch-jobs/.gitkeep

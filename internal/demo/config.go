@@ -51,6 +51,12 @@ type Config struct {
 	// the read-only table browser and nothing else touches it; empty = partner side of the browser off.
 	PartnerDBDSN string
 
+	// BatchJobsDir holds the batch-ocpi-process binaries + config/env built by `make batch-jobs`, so
+	// the Roaming Out cron buttons start the real job. Empty = those buttons stay off.
+	BatchJobsDir  string
+	BatchAppEnv   string
+	BatchTokenKey string
+
 	RatePostPer10s int
 	RateGetPer10s  int
 	Timeout        time.Duration
@@ -79,6 +85,9 @@ func Load() (Config, error) {
 		KafkaOCPIEvseUID: os.Getenv("DEMO_KAFKA_OCPI_EVSE_UID"),
 		EvoltDBDSN:       os.Getenv("EVOLT_DB_DSN"),
 		PartnerDBDSN:     os.Getenv("PARTNER_DB_DSN"),
+		BatchJobsDir:     os.Getenv("BATCH_JOBS_DIR"),
+		BatchAppEnv:      getenv("BATCH_APP_ENV", "dev"),
+		BatchTokenKey:    os.Getenv("BATCH_TOKEN_ENCRYPTION_KEY"),
 		KafkaPartyCC:     getenv("DEMO_KAFKA_PARTY_CC", "TH"),
 		KafkaPartyID:     getenv("DEMO_KAFKA_PARTY_ID", "EVO"),
 		RatePostPer10s:   intenv("DEMO_RATE_POST_PER_10S", 10),

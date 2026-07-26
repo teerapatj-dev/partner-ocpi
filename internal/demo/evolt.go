@@ -187,16 +187,6 @@ func (ev *Evolt) PartnerOutbound(ctx context.Context, partnerName, tokenA, versi
 		})
 }
 
-// AdapterPull makes Evolt fetch one page of the mock's CPO list — the demo
-// stands in for the roaming pull cron that owns this call in production.
-func (ev *Evolt) AdapterPull(ctx context.Context, module, url, token string, limit int) (json.RawMessage, error) {
-	if ev.cfg.EvoltAdapterURL == "" {
-		return nil, errNotConfigured
-	}
-	return ev.callRaw(ctx, http.MethodPost, ev.cfg.EvoltAdapterURL+"/ocpi/"+module+"/pull", "",
-		map[string]any{"url": url, "token": token, "limit": limit})
-}
-
 // PartnerCredentialsID resolves the id Evolt filed our registration under. Every partner-cache read
 // is keyed by it, and it changes on each re-handshake, so it is looked up per call rather than
 // configured. Only the id is taken off the response — the row also carries the encrypted outbound
