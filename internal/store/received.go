@@ -60,20 +60,20 @@ func (s *Store) PutReceivedLocationObject(ctx context.Context, k ObjectKey, payl
 		_, err = s.pool.Exec(ctx, `INSERT INTO received_locations (country_code, party_id, location_id, payload, last_updated)
 			VALUES ($1,$2,$3,$4,$5)
 			ON CONFLICT (country_code, party_id, location_id)
-			DO UPDATE SET payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated`,
+			DO UPDATE SET payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated, synced_at=now()`,
 			k.CountryCode, k.PartyID, k.LocationID, payload, lastUpdated)
 	case 2:
 		status := extractString(payload, "status")
 		_, err = s.pool.Exec(ctx, `INSERT INTO received_evses (country_code, party_id, location_id, evse_uid, status, payload, last_updated)
 			VALUES ($1,$2,$3,$4,$5,$6,$7)
 			ON CONFLICT (country_code, party_id, location_id, evse_uid)
-			DO UPDATE SET status=EXCLUDED.status, payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated`,
+			DO UPDATE SET status=EXCLUDED.status, payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated, synced_at=now()`,
 			k.CountryCode, k.PartyID, k.LocationID, k.EvseUID, status, payload, lastUpdated)
 	default:
 		_, err = s.pool.Exec(ctx, `INSERT INTO received_connectors (country_code, party_id, location_id, evse_uid, connector_id, payload, last_updated)
 			VALUES ($1,$2,$3,$4,$5,$6,$7)
 			ON CONFLICT (country_code, party_id, location_id, evse_uid, connector_id)
-			DO UPDATE SET payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated`,
+			DO UPDATE SET payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated, synced_at=now()`,
 			k.CountryCode, k.PartyID, k.LocationID, k.EvseUID, k.ConnectorID, payload, lastUpdated)
 	}
 	if err != nil {
@@ -172,7 +172,7 @@ func (s *Store) PutReceivedTariff(ctx context.Context, cc, pid, id string, paylo
 	_, err := s.pool.Exec(ctx, `INSERT INTO received_tariffs (country_code, party_id, tariff_id, payload, last_updated)
 		VALUES ($1,$2,$3,$4,$5)
 		ON CONFLICT (country_code, party_id, tariff_id)
-		DO UPDATE SET payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated`,
+		DO UPDATE SET payload=EXCLUDED.payload, last_updated=EXCLUDED.last_updated, synced_at=now()`,
 		cc, pid, id, payload, lastUpdated)
 	return err
 }

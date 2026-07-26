@@ -43,7 +43,19 @@ func main() {
 		}
 	}
 
-	h := demo.NewHandlers(cfg, demo.NewMockAdmin(cfg), demo.NewEvolt(cfg), kafka, charger)
+	var browser *demo.DBBrowser
+	if cfg.EvoltDBDSN != "" || cfg.PartnerDBDSN != "" {
+		browser, err = demo.NewDBBrowser(ctx, cfg.EvoltDBDSN, cfg.PartnerDBDSN, cfg.KafkaStationID)
+		if err != nil {
+			log.Warn().Err(err).Msg("table browser off — cannot reach a configured DB")
+			browser = nil
+		} else {
+			defer browser.Close()
+			log.Info().Msg("table browser on — Tables menu + Evolt seed available")
+		}
+	}
+
+	h := demo.NewHandlers(cfg, demo.NewMockAdmin(cfg), demo.NewEvolt(cfg), kafka, charger, browser)
 	e, err := demo.NewServer(cfg, h)
 	if err != nil {
 		log.Fatal().Err(err).Msg("build server")

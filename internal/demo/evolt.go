@@ -266,6 +266,17 @@ func (ev *Evolt) RoamingTariffPush(ctx context.Context, stationID string) (json.
 		ev.cfg.RoamingAPIKey, nil)
 }
 
+// RoamingTariffBackfill materializes every exposable station once into evolt_ocpi_tariff +
+// location_map_tariff_ocpi (seed-only, no partner push) — the one-time seed the tariff pull/push
+// both read from.
+func (ev *Evolt) RoamingTariffBackfill(ctx context.Context) (json.RawMessage, error) {
+	if ev.cfg.EvoltRoamingURL == "" {
+		return nil, errNotConfigured
+	}
+	return ev.call(ctx, http.MethodPost, ev.cfg.EvoltRoamingURL+"/internal/tariffs/backfill",
+		ev.cfg.RoamingAPIKey, nil)
+}
+
 // Reachable probes the public versions endpoint, cached for 30s — the dev
 // cluster is switched off outside working hours and the UI needs to say so.
 func (ev *Evolt) Reachable(ctx context.Context) bool {

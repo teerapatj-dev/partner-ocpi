@@ -61,8 +61,13 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.DELETE("/push/tariff/:tariff_id", h.DeleteTariffPush)
 	api.POST("/pull/:kind", h.PartnerPull)
 	api.GET("/evolt/mirror", h.EvoltMirror)
+	api.POST("/evolt/seed", h.InitEvolt)
+	api.GET("/tables", h.Tables)
+	api.GET("/station-evses", h.StationEvses)
+	api.GET("/table/:table", h.BrowseTable)
 	api.POST("/evolt/pull/:kind", h.EvoltPull)
 	api.POST("/evolt/tariff-push", h.EvoltTariffPush)
+	api.POST("/evolt/tariff-backfill", h.EvoltTariffBackfill)
 	api.POST("/evolt/evse-status-event", h.EvoltEvseStatusEvent)
 	api.POST("/reset", h.Reset)
 

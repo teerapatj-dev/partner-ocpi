@@ -48,14 +48,21 @@ type evseStatusEvent struct {
 	LastUpdated string `json:"last_updated"`
 }
 
+// ProduceEvseStatus fires a status event for the configured demo EVSE (default target).
 func (k *Kafka) ProduceEvseStatus(ctx context.Context, status string) error {
+	return k.ProduceEvseStatusFor(ctx, status, k.cfg.KafkaStationID, k.cfg.KafkaEvseUID, k.cfg.KafkaEvseID)
+}
+
+// ProduceEvseStatusFor fires a status event for a specific EVSE — the choose-target path passes the
+// chosen station/evse identifiers instead of the configured defaults.
+func (k *Kafka) ProduceEvseStatusFor(ctx context.Context, status, stationID, evseUID, evseID string) error {
 	if !k.enabled {
 		return fmt.Errorf("kafka demo disabled: %s", k.reason)
 	}
 	payload, err := json.Marshal(evseStatusEvent{
-		EvseUID:     k.cfg.KafkaEvseUID,
-		EvseID:      k.cfg.KafkaEvseID,
-		StationID:   k.cfg.KafkaStationID,
+		EvseUID:     evseUID,
+		EvseID:      evseID,
+		StationID:   stationID,
 		OCPPStatus:  status,
 		LastUpdated: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	})
@@ -71,7 +78,7 @@ func (k *Kafka) ProduceEvseStatus(ctx context.Context, status string) error {
 	defer conn.Close()
 	conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	if _, err := conn.WriteMessages(kafka.Message{
-		Key:   []byte(k.cfg.KafkaStationID),
+		Key:   []byte(stationID),
 		Value: payload,
 	}); err != nil {
 		return fmt.Errorf("produce: %w", err)

@@ -1,0 +1,94 @@
+package demo
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+// The browser must never be able to select a token/secret column. This guards the whitelist itself:
+// add a sensitive column to any table's list and this fails.
+func TestBrowsableTablesExcludeSecrets(t *testing.T) {
+	forbidden := []string{"token", "secret", "password", "hash", "body_excerpt", "endpoints", "_enc"}
+	cols := map[string][]string{"evses(scoped)": demoEvsesColumns}
+	for table, spec := range browsableTables {
+		cols[table] = spec.columns
+	}
+	for table, list := range cols {
+		for _, col := range list {
+			lc := strings.ToLower(col)
+			for _, bad := range forbidden {
+				if strings.Contains(lc, bad) {
+					t.Errorf("%s.%s looks sensitive (matched %q) — must not be browsable", table, col, bad)
+				}
+			}
+		}
+	}
+	// Belt-and-braces on the two tables that actually hold secrets.
+	for _, col := range browsableTables["registrations"].columns {
+		if col == "token_inbound" || col == "token_outbound" {
+			t.Fatalf("registrations exposes %s", col)
+		}
+	}
+	for _, col := range browsableTables["ocpi_credentials"].columns {
+		if strings.HasPrefix(col, "token_") {
+			t.Fatalf("ocpi_credentials exposes %s", col)
+		}
+	}
+}
+
+// The menu order lists must exactly cover the registry, with each entry on the right side.
+func TestTableMenuOrderMatchesRegistry(t *testing.T) {
+	seen := map[string]bool{}
+	check := func(order []string, side string) {
+		for _, tbl := range order {
+			if tbl == "evses" { // scoped, added per-instance from config — not in the base map
+				seen[tbl] = true
+				continue
+			}
+			spec, ok := browsableTables[tbl]
+			if !ok {
+				t.Errorf("menu lists %q which is not in browsableTables", tbl)
+				continue
+			}
+			if spec.side != side {
+				t.Errorf("%q is on side %q but listed under %q", tbl, spec.side, side)
+			}
+			seen[tbl] = true
+		}
+	}
+	check(evoltTableOrder, "evolt")
+	check(partnerTableOrder, "partner")
+	for tbl := range browsableTables {
+		if !seen[tbl] {
+			t.Errorf("%q is browsable but missing from the menu order", tbl)
+		}
+	}
+}
+
+// Without a configured DB the three DB-backed endpoints fail closed, not panic.
+func TestDBEndpointsRequireDB(t *testing.T) {
+	h := newHandlers(t, Config{}, nil, nil) // h.db == nil
+
+	rec := doReq(t, h.Tables, http.MethodGet, "/api/demo/tables", "")
+	if got := decode(t, rec); got.ok {
+		t.Errorf("Tables should fail without a DB: %s", rec.Body.String())
+	}
+	rec = doReq(t, h.BrowseTable, http.MethodGet, "/api/demo/table/ocpi_credentials", "", "table", "ocpi_credentials")
+	if got := decode(t, rec); got.ok {
+		t.Errorf("BrowseTable should fail without a DB: %s", rec.Body.String())
+	}
+	rec = doReq(t, h.InitEvolt, http.MethodPost, "/api/demo/evolt/seed", "")
+	if got := decode(t, rec); got.ok {
+		t.Errorf("InitEvolt should fail without a DB: %s", rec.Body.String())
+	}
+}
+
+func TestQuoteIdent(t *testing.T) {
+	if got := quoteIdent("is_self"); got != `"is_self"` {
+		t.Fatalf("quoteIdent: %s", got)
+	}
+	if got := quoteIdent(`a"b`); got != `"a""b"` {
+		t.Fatalf("quoteIdent should double embedded quotes: %s", got)
+	}
+}

@@ -47,6 +47,10 @@ type Config struct {
 	// UNKNOWN a dev charger reports. Empty DSN = feature off (status stays whatever the DB holds).
 	EvoltDBDSN string
 
+	// PartnerDBDSN points at the mock's own Postgres (own_*/received_*/registrations/request_log). Only
+	// the read-only table browser and nothing else touches it; empty = partner side of the browser off.
+	PartnerDBDSN string
+
 	RatePostPer10s int
 	RateGetPer10s  int
 	Timeout        time.Duration
@@ -74,6 +78,7 @@ func Load() (Config, error) {
 		KafkaEvseID:      os.Getenv("DEMO_KAFKA_EVSE_ID"),
 		KafkaOCPIEvseUID: os.Getenv("DEMO_KAFKA_OCPI_EVSE_UID"),
 		EvoltDBDSN:       os.Getenv("EVOLT_DB_DSN"),
+		PartnerDBDSN:     os.Getenv("PARTNER_DB_DSN"),
 		KafkaPartyCC:     getenv("DEMO_KAFKA_PARTY_CC", "TH"),
 		KafkaPartyID:     getenv("DEMO_KAFKA_PARTY_ID", "EVO"),
 		RatePostPer10s:   intenv("DEMO_RATE_POST_PER_10S", 10),

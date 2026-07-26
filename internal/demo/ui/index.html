@@ -10,63 +10,62 @@
 --in:#3ecf8e;--out:#b78aff}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,'Segoe UI',Roboto,'Noto Sans Thai',sans-serif}
-header{display:flex;align-items:center;gap:14px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
-header h1{font-size:17px;margin:0}
+header{display:flex;align-items:center;gap:12px;padding:12px 22px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:16px;margin:0}
 .badge{padding:3px 10px;border-radius:20px;font-size:12px;background:var(--panel2);border:1px solid var(--line)}
 .badge.on{color:var(--green);border-color:var(--green)}
 .badge.off{color:var(--red);border-color:var(--red)}
 .badge.warn{color:var(--amber);border-color:var(--amber)}
 #banner{display:none;padding:8px 22px;background:#3a2a12;color:var(--amber);font-size:13px}
+
+/* top tab nav */
+.tabs{display:flex;gap:2px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;z-index:20}
+.tabs button{background:transparent;color:var(--muted);border:0;border-bottom:2px solid transparent;border-radius:0;padding:12px 15px;font-weight:600;font-size:13.5px;cursor:pointer;display:flex;gap:7px;align-items:center}
+.tabs button:hover{color:var(--text)}
+.tabs button.active{color:var(--text);border-bottom-color:var(--blue)}
+
 main{max-width:1500px;margin:0 auto;padding:16px 22px}
-section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
-section h2{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
-section p.hint{color:var(--muted);font-size:12px;margin:0 0 12px}
-.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
-.card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px}
-.card b{font-size:13px;display:block;margin-bottom:6px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tabpane{display:none} .tabpane.on{display:block}
+.hidden{display:none!important}
+
+/* sub in/out toggle */
+.subnav{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.subnav button{background:var(--panel2);color:#cdd5e4;border:0;border-radius:0;font-weight:700;padding:8px 18px;cursor:pointer;font-size:13px}
+.subnav button:hover{background:#26314a;color:#fff}
+.subnav button.on.in{background:var(--in);color:#08101f}
+.subnav button.on.out{background:var(--out);color:#08101f}
+
+/* push/pull group heading inside a flow */
+.flowhead{font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--muted);text-transform:uppercase;margin:12px 0 8px;padding-bottom:4px;border-bottom:1px dashed var(--line);display:flex;gap:7px;align-items:center}
+.flowhead:first-of-type{margin-top:4px}
+.flowhead .tagp{font-size:10px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--text);text-transform:none;font-weight:600}
+
+/* dir pane = flow (left) + result (right) */
+.dirpane{display:grid;grid-template-columns:minmax(300px,410px) 1fr;gap:16px}
+@media(max-width:900px){.dirpane{grid-template-columns:1fr}}
+.flow,.rpanel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.flow.in,.rpanel.in{border-top:3px solid var(--in)} .flow.out,.rpanel.out{border-top:3px solid var(--out)}
+.flow h3,.rpanel h3{margin:0 0 3px;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.flow .mini,.rpanel .mini{color:var(--muted);font-size:11.5px;margin:0 0 12px}
+.cardtag{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:ui-monospace,monospace}
+.rtag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:5px}
+.rtag.in{color:#08101f;background:var(--in)} .rtag.out{color:#08101f;background:var(--out)}
+.act{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+.act .lbl{font-size:12px;min-width:112px;color:var(--muted)}
+
 button{background:var(--blue);border:0;border-radius:6px;color:#08101f;font-weight:600;padding:7px 12px;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px}
 button.secondary{background:var(--panel);color:var(--text);border:1px solid var(--line)}
 button.danger{background:var(--red)}
 button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:500;padding:3px 8px;font-size:11.5px}
-button:disabled{opacity:.5;cursor:not-allowed}
 button.in{background:var(--in)} button.out{background:var(--out)}
+button:disabled{opacity:.5;cursor:not-allowed}
 select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;max-width:230px}
 
-/* diagram legend */
-.legend{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:800px){.legend{grid-template-columns:1fr}}
-.leg{border-radius:9px;padding:11px 13px;font-size:12.5px;border:1px solid}
-.leg.in{border-color:var(--in);background:rgba(62,207,142,.06)}
-.leg.out{border-color:var(--out);background:rgba(183,138,255,.06)}
-.leg b{font-size:13px}
-.leg .arrow{font-family:ui-monospace,monospace;color:var(--muted);font-size:11.5px;margin-top:5px;display:block}
+/* setup strip */
+.setup{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.setup .t{font-size:12.5px;color:var(--muted);margin-right:auto}
 
-/* roaming sections */
-.rsec{border-left:3px solid var(--line)}
-.rsec.in{border-left-color:var(--in)}
-.rsec.out{border-left-color:var(--out)}
-.rtag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
-.rtag.in{color:#08101f;background:var(--in)}
-.rtag.out{color:#08101f;background:var(--out)}
-.mods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:900px){.mods{grid-template-columns:1fr}}
-.subsec{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px}
-.subsec.in{border-left:3px solid var(--in)}
-.subsec.out{border-left:3px solid var(--out)}
-.subsec h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.cardtag{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:ui-monospace,monospace}
-.mini{color:var(--muted);font-size:11.5px;margin:0 0 8px}
-.act{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
-.act .lbl{font-size:12px;min-width:118px}
-
-/* data panels */
-.mirror{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:1000px){.mirror{grid-template-columns:1fr}}
-.pane{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:12px}
-.pane.in{border-top:3px solid var(--in)} .pane.out{border-top:3px solid var(--out)}
-.pane h3{margin:0 0 2px;font-size:13.5px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.pane .sub{color:var(--muted);font-size:11.5px;margin:0 0 10px}
+/* result items */
 .item{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:9px 10px;margin-bottom:8px;transition:background .3s,border-color .3s}
 .item .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .item .name{font-weight:600;font-size:13px}
@@ -82,35 +81,55 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 .price{font-size:17px;font-weight:700;color:var(--amber);letter-spacing:.3px}
 .price small{font-size:11.5px;font-weight:400;color:var(--muted);margin-left:4px}
 .kv{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px dashed var(--line)}
-.kv:last-child{border-bottom:0}
-.kv span:first-child{color:var(--muted)}
+.kv:last-child{border-bottom:0}.kv span:first-child{color:var(--muted)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
-.empty{color:var(--muted);font-size:12px;padding:14px 10px;text-align:center;border:1px dashed var(--line);border-radius:7px}
+.empty{color:var(--muted);font-size:12px;padding:16px 10px;text-align:center;border:1px dashed var(--line);border-radius:7px}
 @keyframes flashbg{0%{background:rgba(255,180,84,.55);border-color:var(--amber)}100%{background:var(--bg);border-color:var(--line)}}
 @keyframes flashchip{0%{background:rgba(255,180,84,.65)}100%{background:transparent}}
-.item.flash{animation:flashbg 2.2s ease-out}
-.chip.flash{animation:flashchip 2.2s ease-out}
+.item.flash{animation:flashbg 2.2s ease-out}.chip.flash{animation:flashchip 2.2s ease-out}
 .note{color:var(--amber);font-size:11.5px;margin-top:6px}
 
+/* table browser */
+.tblbrowser{display:grid;grid-template-columns:220px 1fr;gap:16px}
+@media(max-width:800px){.tblbrowser{grid-template-columns:1fr}}
+.tblrail .sidepick{display:flex;gap:6px;margin-bottom:12px}
+.tblrail .sidepick button{flex:1;background:var(--panel2);color:var(--muted);border:1px solid var(--line);justify-content:center}
+.tblrail .sidepick button.on{color:var(--text);border-color:var(--blue)}
+#tbl-list button{display:block;width:100%;text-align:left;background:transparent;color:var(--text);border:1px solid var(--line);margin-bottom:5px;font-family:ui-monospace,monospace;font-weight:500;font-size:12px;padding:6px 9px}
+#tbl-list button.on{border-color:var(--blue);background:var(--panel2)}
+.tblbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.tblbar .cnt{color:var(--muted);font-size:12px;margin-left:auto}
+.tblmain{min-width:0} /* let the grid scroll inside gridwrap instead of widening the page */
+.gridwrap{overflow:auto;border:1px solid var(--line);border-radius:8px;max-height:62vh;max-width:100%}
+table.grid{border-collapse:collapse;font-size:12px;width:100%}
+table.grid th{position:sticky;top:0;background:var(--panel2);color:var(--muted);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.grid td{padding:5px 10px;border-bottom:1px solid var(--line);white-space:nowrap;max-width:340px;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
+table.grid tr:hover td{background:var(--panel)}
+.tblpage{display:flex;gap:10px;align-items:center;margin-top:12px;font-size:12px;color:var(--muted)}
+.nullv{color:var(--gray);font-style:italic}
+
 /* request log */
+.logbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.logbar .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.logbar .seg button{background:var(--panel2);color:var(--muted);border:0;border-radius:0;padding:6px 11px;font-size:12px;font-weight:600}
+.logbar .seg button.on{background:var(--blue);color:#08101f}
 #log{width:100%;border-collapse:collapse;font-size:12px}
-#log th{color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
-#log td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-#log tr{cursor:pointer} #log tr:hover td{background:var(--panel2)}
-#log td.path{word-break:break-all;max-width:340px}
-.dir-in{color:var(--green)} .dir-out{color:var(--blue)}
-.code-ok{color:var(--green)} .code-bad{color:var(--red)}
-.counts{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+#log th{color:var(--muted);text-align:left;padding:5px 7px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+#log td{padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:top}
+#log tr{cursor:pointer}#log tr:hover td{background:var(--panel2)}
+#log td.path{word-break:break-all;max-width:360px}
+.dir-in{color:var(--green)}.dir-out{color:var(--blue)}
+.code-ok{color:var(--green)}.code-bad{color:var(--red)}
+.mtag{font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--muted)}
+.counts{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 14px}
 .counts div{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--muted)}
 .counts div b{color:var(--text);font-size:15px;display:block}
-.logwrap{max-height:340px;overflow:auto}
+.logwrap{max-height:56vh;overflow:auto}
 
-/* spinner */
+/* spinner + modal */
 .spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:rot .7s linear infinite}
 button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);border-top-color:var(--text)}
 @keyframes rot{to{transform:rotate(360deg)}}
-
-/* modal */
 .overlay{position:fixed;inset:0;background:rgba(6,10,18,.72);display:none;align-items:flex-start;justify-content:center;padding:34px 16px;z-index:50;overflow:auto}
 .overlay.show{display:flex}
 .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
@@ -132,7 +151,6 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
 .result .rtitle{font-weight:700;margin-bottom:6px}
 .result pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-all;color:var(--muted);font-size:11.5px;max-height:280px;overflow:auto;background:var(--bg);border-radius:6px;padding:8px}
 .running{display:flex;gap:9px;align-items:center;color:var(--blue);font-size:12.5px;margin-bottom:10px}
-.wide{grid-column:1/-1}
 </style>
 </head>
 <body>
@@ -145,125 +163,171 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
 </header>
 <div id="banner">⚠️ Evolt dev ตอนนี้ติดต่อไม่ได้ (คลัสเตอร์ปิดนอกเวลางาน ~20:00) — ปุ่มฝั่ง Evolt จะ error ชั่วคราว</div>
 
+<nav class="tabs">
+  <button class="active" data-tab="handshake" onclick="showTab('handshake',this)">🤝 Handshake</button>
+  <button data-tab="location" onclick="showTab('location',this)">🔌 Location</button>
+  <button data-tab="tariff" onclick="showTab('tariff',this)">💰 Tariff</button>
+  <button data-tab="tables" onclick="showTab('tables',this)">🗄️ Tables</button>
+  <button data-tab="log" onclick="showTab('log',this)">📜 Log</button>
+</nav>
+
 <main>
-  <!-- diagram legend -->
-  <section>
-    <h2>🗺️ อ่านแผนภาพก่อน — Roaming มี 2 ทิศ</h2>
-    <p class="hint">แยกตาม "ใครเอา driver ไปชาร์จที่ตู้ใคร" ตาม sequence diagram ของทีม (EV-1377) · ทุก module ด้านล่าง (Location/Tariff) แบ่ง <b style="color:var(--in)">In = ซ้าย/เขียว</b> · <b style="color:var(--out)">Out = ขวา/ม่วง</b> เหมือนกันหมด</p>
-    <div class="legend">
-      <div class="leg in"><b style="color:var(--in)">🟢 Roaming In</b> — Evolt เป็น <b>CPO</b> เปิดข้อมูลตู้ตัวเองให้ partner · <b>driver ของ partner</b> มาชาร์จที่ตู้เรา
-        <span class="arrow">partner ─GET /cpo/…→ Evolt (ดึง) · Evolt ─push→ partner (สถานะ/ราคาเปลี่ยน)</span></div>
-      <div class="leg out"><b style="color:var(--out)">🟣 Roaming Out</b> — Evolt เป็น <b>eMSP</b> รับข้อมูลตู้ partner เก็บใน <span class="mono">ocpi_partner_*</span> · <b>driver ของเรา</b> ไปชาร์จที่ตู้ partner
-        <span class="arrow">partner ─PUT/PATCH /emsp/…→ Evolt (ยัดเข้า) · Evolt ─adapter pull→ partner (ดึงเข้า)</span></div>
+  <!-- ===================== HANDSHAKE ===================== -->
+  <section class="tabpane on" id="tab-handshake">
+    <div class="setup">
+      <span class="t">🌱 <b>ตั้งค่าเริ่มต้น</b> — ถ้า Evolt ยังไม่มีตัวตน OCPI (โดนล้าง) กด seed ก่อน แล้วค่อย handshake</span>
+      <button class="secondary" onclick="runFlow('evolt-seed',this)">🌱 Initialize Evolt (seed 3 ตาราง)</button>
+      <button class="danger" onclick="if(confirm('ล้างทะเบียน + ข้อมูลของ PlugSiam ฝั่ง partner?\n\n• ลบทะเบียน + เคลียร์ received_* / log แล้ว seed own ใหม่\n• Evolt จะยังจำไว้ (spec ไม่มี DELETE /credentials)'))runFlow('unregister',this)">ยกเลิกทะเบียน + ล้าง DB</button>
     </div>
-  </section>
-
-  <!-- handshake -->
-  <section class="rsec" style="border-left-color:var(--blue)">
-    <h2><span class="rtag" style="color:#08101f;background:var(--blue)">ขั้นที่ 1</span> Handshake (Credentials) <span class="cardtag">EV-1321</span> <span class="mini" style="margin:0">— ต้องทำก่อน ถึงจะ roaming ได้ทั้งสองทิศ</span></h2>
-    <p class="hint">แลก Token A/B/C ตาม OCPI 2.2.1 §7 · ฝ่ายที่ "เริ่ม" คือฝ่ายที่ยิง versions→details→credentials เข้าหาอีกฝ่าย</p>
-    <div class="mods">
-      <div class="subsec">
-        <h3>▶ ทิศ A — Evolt เริ่ม <span class="cardtag">แนะนำ</span></h3>
-        <p class="mini">Evolt (orch) เดิน handshake เข้าหา PlugSiam · orch อยู่ในคลัสเตอร์ resolve ได้เสมอ → ใช้งานได้จริงตอนนี้</p>
+    <div class="subnav">
+      <button class="seg in on" data-d="in" onclick="showDir('handshake','in',this)">🟢 Evolt เริ่ม</button>
+      <button class="seg out" data-d="out" onclick="showDir('handshake','out',this)">🟣 Partner เริ่ม</button>
+    </div>
+    <div class="dirpane" id="handshake-in">
+      <div class="flow in">
+        <h3>Evolt เริ่ม handshake <span class="cardtag">EV-1321</span></h3>
+        <p class="mini">Evolt (orch) เดิน versions→details→credentials เข้าหา PlugSiam · orch อยู่ในคลัสเตอร์ resolve ได้ → ใช้ได้จริงตอนนี้</p>
         <div class="act"><span class="lbl">Evolt → PlugSiam</span>
-          <button onclick="runFlow('evolt-init',this)">▶ ให้ Evolt เริ่ม</button></div>
-        <span class="mini mono">Evolt ─(Token A/B/C)→ PlugSiam · จบ = REGISTERED ทั้งสองฝั่ง</span>
+          <button class="in" onclick="runFlow('evolt-init',this)">▶ ให้ Evolt เริ่ม</button></div>
+        <span class="mini mono">Evolt ─(Token A/B/C)→ PlugSiam · จบ = REGISTERED สองฝั่ง</span>
       </div>
-      <div class="subsec">
-        <h3>ทิศ B — Partner เริ่ม</h3>
-        <p class="mini">PlugSiam เดิน handshake เข้าหา Evolt (GET versions → GET details → POST credentials)</p>
-        <div class="act"><span class="lbl">PlugSiam → Evolt</span>
-          <button class="secondary" onclick="runFlow('partner-init',this)">Partner เริ่ม</button></div>
-        <span class="mini" style="color:var(--amber)">⚠️ รอ Evolt แก้ Vault base_url ก่อน (ตอนนี้ยัง 502 — Evolt แจก URL svc.cluster.local)</span>
-      </div>
+      <div class="rpanel in"><h3>สถานะทะเบียน <span class="rtag in">ผลลัพธ์</span></h3><div id="res-hs-in"></div></div>
     </div>
-    <div class="act" style="margin-top:12px"><span class="lbl">รีเซ็ตทะเบียน (partner)</span>
-      <button class="danger" onclick="if(confirm('ล้างทะเบียน + ข้อมูลของ PlugSiam ฝั่ง partner?\n\n• ลบทะเบียน + เคลียร์ received_* / log แล้ว seed own ใหม่ (เริ่มสะอาด)\n• Evolt จะยังจำไว้ (ไม่มี DELETE /credentials ตาม spec) — ต้องล้างฝั่ง Evolt แยก'))runFlow('unregister',this)">ยกเลิกทะเบียน + ล้าง DB</button>
-      <span class="mini">ลบทะเบียน + เคลียร์ received/log ฝั่ง PlugSiam แล้ว seed ใหม่ · Evolt ยังจำไว้ (spec ไม่มี DELETE)</span></div>
+    <div class="dirpane hidden" id="handshake-out">
+      <div class="flow out">
+        <h3>Partner เริ่ม handshake <span class="cardtag">EV-1321</span></h3>
+        <p class="mini">PlugSiam เดิน GET versions → GET details → POST credentials เข้าหา Evolt</p>
+        <div class="act"><span class="lbl">PlugSiam → Evolt</span>
+          <button class="out" onclick="runFlow('partner-init',this)">Partner เริ่ม</button></div>
+        <span class="mini mono">PlugSiam ─(GET versions/details, POST credentials)→ Evolt · จบ = REGISTERED สองฝั่ง</span>
+      </div>
+      <div class="rpanel out"><h3>สถานะทะเบียน <span class="rtag out">ผลลัพธ์</span></h3><div id="res-hs-out"></div></div>
+    </div>
   </section>
 
-  <!-- LOCATION -->
-  <section class="rsec" style="border-left-color:var(--blue)">
-    <h2>🔌 Location <span class="cardtag">EV-1560 · EV-1561</span> <span class="mini" style="margin:0">— แลกข้อมูลสถานี/สถานะหัวชาร์จ · ซ้าย = In · ขวา = Out</span></h2>
-    <div class="mods">
-      <div class="subsec in">
-        <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดตู้ตัวเองให้ partner <span class="cardtag">EV-1560</span></h3>
-        <p class="mini">เราเป็น CPO — partner ดึง / เรา push ให้ · ผลไปแผง <b style="color:var(--in)">ซ้ายล่าง (DB PlugSiam)</b></p>
-        <div class="act"><span class="lbl">partner ดึง locations</span>
+  <!-- ===================== LOCATION ===================== -->
+  <section class="tabpane" id="tab-location">
+    <div class="subnav">
+      <button class="seg in on" data-d="in" onclick="showDir('location','in',this)">🟢 Roaming In</button>
+      <button class="seg out" data-d="out" onclick="showDir('location','out',this)">🟣 Roaming Out</button>
+    </div>
+    <div class="dirpane" id="location-in">
+      <div class="flow in">
+        <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดตู้ให้ partner <span class="cardtag">EV-1560</span></h3>
+        <p class="mini">เราเป็น CPO · ผลไปแผงขวา (DB PlugSiam)</p>
+        <div class="flowhead">⬇️ PULL <span class="tagp">partner ดึงจากเรา</span></div>
+        <div class="act"><span class="lbl">ดึง locations</span>
           <button class="in" onclick="runFlow('in-loc-pull',this)">ดึง (GET /cpo)</button></div>
-        <div class="act"><span class="lbl">เรา push สถานะตู้</span>
-          <select id="sel-kafka-status"><option>AVAILABLE</option><option>CHARGING</option><option>OUTOFORDER</option></select>
-          <button class="in" id="btn-kafka" onclick="runFlow('in-loc-push-status',this)">ยิง event (Kafka→PATCH)</button></div>
+        <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner</span></div>
+        <div class="act"><span class="lbl">เลือกตู้ (evse)</span>
+          <select id="sel-push-evse" title="EVSE ของสถานี demo"></select></div>
+        <div class="act"><span class="lbl">push สถานะ</span>
+          <select id="sel-kafka-status"><option>AVAILABLE</option><option>CHARGING</option><option>FINISHING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
+          <button class="in" id="btn-kafka" onclick="runFlow('in-loc-push-status',this)">ยิง event</button></div>
       </div>
-      <div class="subsec out">
+      <div class="rpanel in"><h3>🟩 ตู้ของ Evolt ที่ PlugSiam ถืออยู่ <span class="rtag in">received_*</span></h3>
+        <p class="mini">คือหน้าจอที่ partner จริงเห็น (party ในข้อมูล = TH/EVT)</p><div id="res-loc-in"></div></div>
+    </div>
+    <div class="dirpane hidden" id="location-out">
+      <div class="flow out">
         <h3><span class="rtag out">ROAMING OUT</span> Evolt รับตู้ partner <span class="cardtag">EV-1561</span></h3>
-        <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_*</span> · ผลไปแผง <b style="color:var(--out)">ขวาล่าง (DB Evolt)</b></p>
-        <div class="act"><span class="lbl">partner push location</span>
-          <select id="sel-location"></select>
-          <button class="out" onclick="runFlow('out-loc-push',this)">PUT</button></div>
-        <div class="act"><span class="lbl">partner push สถานะตู้</span>
+        <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_*</span> · ผลไปแผงขวา (DB Evolt)</p>
+        <div class="flowhead">⬆️ PUSH <span class="tagp">partner ยัดเข้ามา</span></div>
+        <div class="act"><span class="lbl">push location</span>
+          <select id="sel-location"></select><button class="out" onclick="runFlow('out-loc-push',this)">PUT</button></div>
+        <div class="act"><span class="lbl">push สถานะ</span>
           <select id="sel-evse"></select>
-          <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option></select>
+          <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
           <button class="out" onclick="runFlow('out-loc-push-status',this)">PATCH</button></div>
-        <div class="act"><span class="lbl">เรา pull partner (cron)</span>
+        <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
+        <div class="act"><span class="lbl">pull (cron)</span>
           <button class="out" onclick="runFlow('out-loc-pull',this)">ดึงผ่าน adapter</button></div>
       </div>
+      <div class="rpanel out"><h3>🟪 ตู้ของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">ocpi_partner_*</span></h3>
+        <p class="mini">party ในข้อมูล = TH/PLG · ดูตารางเต็มที่แท็บ Tables</p><div id="res-loc-out"></div></div>
     </div>
   </section>
 
-  <!-- TARIFF -->
-  <section class="rsec" style="border-left-color:var(--blue)">
-    <h2>💰 Tariff <span class="cardtag">EV-1584 · EV-1585</span> <span class="mini" style="margin:0">— แลกข้อมูลราคา · ซ้าย = In · ขวา = Out</span></h2>
-    <div class="mods">
-      <div class="subsec in">
-        <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดราคาตัวเองให้ partner <span class="cardtag">EV-1584</span></h3>
-        <p class="mini">เราเป็น CPO · pull = อ่านต้นทางสด·แปลงทันที (ราคาที่ partner ได้ = จริงเสมอ) · ผลไปแผง <b style="color:var(--in)">ซ้ายล่าง</b></p>
-        <div class="act"><span class="lbl">partner ดึง tariffs</span>
+  <!-- ===================== TARIFF ===================== -->
+  <section class="tabpane" id="tab-tariff">
+    <div class="subnav">
+      <button class="seg in on" data-d="in" onclick="showDir('tariff','in',this)">🟢 Roaming In</button>
+      <button class="seg out" data-d="out" onclick="showDir('tariff','out',this)">🟣 Roaming Out</button>
+    </div>
+    <div class="dirpane" id="tariff-in">
+      <div class="flow in">
+        <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดราคาให้ partner <span class="cardtag">EV-1584</span></h3>
+        <p class="mini">เราเป็น CPO · seed → materialize เข้า <span class="mono">evolt_ocpi_tariff</span> ก่อน</p>
+        <div class="flowhead">🌱 SEED <span class="tagp">materialize ราคา evolt</span></div>
+        <div class="act"><span class="lbl">backfill ทุก station</span>
+          <button class="in" onclick="runFlow('evolt-tariff-backfill',this)">🌱 Backfill</button></div>
+        <div class="flowhead">⬇️ PULL <span class="tagp">partner ดึงจากเรา</span></div>
+        <div class="act"><span class="lbl">ดึง tariffs</span>
           <button class="in" onclick="runFlow('in-trf-pull',this)">ดึง (GET /cpo)</button></div>
-        <div class="act"><span class="lbl">เรา push tariff (fanout)</span>
-          <select id="sel-station"></select>
-          <button class="in" onclick="runFlow('in-trf-push',this)">สั่ง push</button></div>
+        <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner (fanout)</span></div>
+        <div class="act"><span class="lbl">push 1 station</span>
+          <select id="sel-station"></select><button class="in" onclick="runFlow('in-trf-push',this)">สั่ง push</button></div>
       </div>
-      <div class="subsec out">
+      <div class="rpanel in"><h3>🟩 ราคาของ Evolt ที่ PlugSiam ถืออยู่ <span class="rtag in">received_tariffs</span></h3>
+        <p class="mini">คือราคาที่ partner จริงเห็น</p><div id="res-trf-in"></div></div>
+    </div>
+    <div class="dirpane hidden" id="tariff-out">
+      <div class="flow out">
         <h3><span class="rtag out">ROAMING OUT</span> Evolt รับราคา partner <span class="cardtag">EV-1585</span></h3>
-        <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_tariffs</span> · PUT=upsert · DELETE=soft-delete · ผลไปแผง <b style="color:var(--out)">ขวาล่าง</b></p>
-        <div class="act"><span class="lbl">partner push tariff</span>
+        <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_tariffs</span></p>
+        <div class="flowhead">⬆️ PUSH <span class="tagp">partner ยัดเข้ามา</span></div>
+        <div class="act"><span class="lbl">push tariff</span>
           <select id="sel-tariff" onchange="refreshMirror()"></select>
-          <button class="out" onclick="runFlow('out-trf-push',this)">PUT</button>
-          <button class="danger" onclick="runFlow('out-trf-del',this)">DELETE</button></div>
-        <div class="act"><span class="lbl">เรา pull partner (cron)</span>
+          <button class="out" onclick="runFlow('out-trf-push',this)">PUT (upsert)</button>
+          <button class="danger" onclick="runFlow('out-trf-del',this)">DELETE (soft)</button></div>
+        <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
+        <div class="act"><span class="lbl">pull (cron)</span>
           <button class="out" onclick="runFlow('out-trf-pull',this)">ดึงผ่าน adapter</button></div>
       </div>
+      <div class="rpanel out"><h3>🟪 ราคาของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">อ่านกลับ</span></h3>
+        <p class="mini">เลือก tariff ด้านซ้ายเพื่ออ่านค่าที่ Evolt เก็บ</p><div id="res-trf-out"></div></div>
     </div>
   </section>
 
-  <!-- data panels -->
-  <section>
-    <h2>📦 ข้อมูลจริงที่แต่ละฝั่งถืออยู่ <span class="badge" style="font-weight:400">อัปเดตอัตโนมัติ · ค่าที่เปลี่ยนกะพริบส้ม</span></h2>
-    <p class="hint">"ของจริงในระบบ" ไม่ใช่ผลตอบ HTTP — ไม่ต้องเปิด DB · <b>ซ้าย = DB ของ PlugSiam</b> · <b>ขวา = DB ของ Evolt</b> · กด <b>ดู JSON</b> เพื่อดู payload เต็ม</p>
-    <div class="mirror">
-      <div class="pane in">
-        <h3>🟩 DB ฝั่ง <b style="color:var(--in)">PlugSiam (partner)</b> <span class="rtag in">ผล Roaming In</span></h3>
-        <p class="sub">เก็บ <b>ข้อมูลของ Evolt</b> (party TH/EVT) ที่ push/ให้ดึงเข้ามา — คือหน้าจอที่ partner จริงเห็น · ตาราง <span class="mono">received_*</span> ของ mock</p>
-        <div id="pane-in"></div>
+  <!-- ===================== TABLES ===================== -->
+  <section class="tabpane" id="tab-tables">
+    <div class="tblbrowser">
+      <div class="tblrail">
+        <div class="sidepick">
+          <button class="on" data-s="evolt" onclick="pickSide('evolt',this)">🟪 Evolt</button>
+          <button data-s="partner" onclick="pickSide('partner',this)">🟩 Partner</button>
+        </div>
+        <div id="tbl-list"></div>
       </div>
-      <div class="pane out">
-        <h3>🟪 DB ฝั่ง <b style="color:var(--out)">Evolt</b> <span class="rtag out">ผล Roaming Out</span></h3>
-        <p class="sub">เก็บ <b>ข้อมูลของ PlugSiam</b> (party TH/PLG) ที่ partner push/เรา pull เข้ามา — ตาราง <span class="mono">ocpi_partner_*</span> ของ Evolt</p>
-        <div id="pane-out"></div>
+      <div class="tblmain">
+        <div class="tblbar" id="tbl-bar"><span class="mini" style="color:var(--muted)">← เลือกตารางทางซ้าย</span></div>
+        <div class="gridwrap"><table class="grid" id="tbl-grid"></table></div>
+        <div class="tblpage" id="tbl-page"></div>
       </div>
     </div>
   </section>
 
-  <!-- request log -->
-  <section>
-    <h2>📜 Request log ของ partner (OCPI จริง วิ่งเข้า-ออก PlugSiam)
-      <span class="badge" style="font-weight:400">เวลาไทย · คลิกแถวดูรายละเอียด</span>
-      <button class="ghost" style="margin-left:auto" onclick="clearLog(this)">🧹 เคลียร์ log</button></h2>
+  <!-- ===================== LOG ===================== -->
+  <section class="tabpane" id="tab-log">
+    <div class="logbar">
+      <span class="mini" style="color:var(--muted)">module:</span>
+      <span class="seg" id="lf-mod">
+        <button class="on" data-v="all" onclick="setLogFilter('mod','all',this)">ทั้งหมด</button>
+        <button data-v="handshake" onclick="setLogFilter('mod','handshake',this)">handshake</button>
+        <button data-v="location" onclick="setLogFilter('mod','location',this)">location</button>
+        <button data-v="tariff" onclick="setLogFilter('mod','tariff',this)">tariff</button>
+      </span>
+      <span class="mini" style="color:var(--muted)">ทิศ:</span>
+      <span class="seg" id="lf-dir">
+        <button class="on" data-v="all" onclick="setLogFilter('dir','all',this)">ทั้งหมด</button>
+        <button data-v="in" onclick="setLogFilter('dir','in',this)">🟢 in</button>
+        <button data-v="out" onclick="setLogFilter('dir','out',this)">🟣 out</button>
+      </span>
+      <button class="ghost" style="margin-left:auto" onclick="clearLog(this)">🧹 เคลียร์ log</button>
+    </div>
     <div class="counts" id="counts"></div>
     <div class="logwrap"><table id="log">
-      <thead><tr><th>เวลา (ไทย)</th><th>ทิศ</th><th>method</th><th>path</th><th>HTTP</th><th>OCPI</th><th>คู่สนทนา</th></tr></thead>
+      <thead><tr><th>เวลา (ไทย)</th><th>module</th><th>ทิศ</th><th>method</th><th>path</th><th>HTTP</th><th>OCPI</th><th>คู่สนทนา</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -272,16 +336,13 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
 <!-- flow / process modal -->
 <div class="overlay" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal">
-    <div class="mhead">
-      <div><h3 id="m-title">…</h3><div class="meta" id="m-meta"></div></div>
-      <button class="close" onclick="closeModal()">×</button>
-    </div>
+    <div class="mhead"><div><h3 id="m-title">…</h3><div class="meta" id="m-meta"></div></div>
+      <button class="close" onclick="closeModal()">×</button></div>
     <div class="running" id="m-running"><span class="spin"></span> กำลังทำงาน…</div>
     <ol class="steps" id="m-steps"></ol>
     <div class="result" id="m-result"><div class="rtitle" id="m-rtitle"></div><div id="m-rbody"></div><pre id="m-rjson"></pre></div>
   </div>
 </div>
-
 <!-- raw json viewer -->
 <div class="overlay" id="jmodal" onclick="if(event.target===this)closeJSON()">
   <div class="modal">
@@ -298,29 +359,39 @@ const val=id=>$(id).value;
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const asObj=p=>{try{return typeof p==='string'?JSON.parse(p):(p||{})}catch(e){return {}}};
 
-// ---- เวลาไทย: log ts เป็น UTC -> Asia/Bangkok ----
 function thTime(ts){
-  if(!ts)return '';
-  let s=String(ts);
+  if(!ts)return '';let s=String(ts);
   if(!/[Zz]$|[+-]\d\d:?\d\d$/.test(s))s+='Z';
-  const d=new Date(s);
-  if(isNaN(d))return ts;
+  const d=new Date(s);if(isNaN(d))return ts;
   return d.toLocaleString('sv-SE',{timeZone:'Asia/Bangkok'}).slice(0,19).replace('T',' ');
 }
 function ago(iso){
-  if(!iso)return '—';
-  let s=String(iso); if(!/[Zz]$|[+-]\d\d:?\d\d$/.test(s))s+='Z';
-  const d=(Date.now()-new Date(s).getTime())/1000;
-  if(isNaN(d))return iso;
-  if(d<0)return 'อนาคต';
-  if(d<60)return Math.floor(d)+' วิที่แล้ว';
-  if(d<3600)return Math.floor(d/60)+' นาทีที่แล้ว';
-  if(d<86400)return Math.floor(d/3600)+' ชม.ที่แล้ว';
+  if(!iso)return '—';let s=String(iso);if(!/[Zz]$|[+-]\d\d:?\d\d$/.test(s))s+='Z';
+  const d=(Date.now()-new Date(s).getTime())/1000;if(isNaN(d))return iso;
+  if(d<0)return 'อนาคต';if(d<60)return Math.floor(d)+' วิที่แล้ว';
+  if(d<3600)return Math.floor(d/60)+' นาทีที่แล้ว';if(d<86400)return Math.floor(d/3600)+' ชม.ที่แล้ว';
   return thTime(iso).slice(0,10);
 }
 
-// ---- FLOWS registry: ทุก action + sequence steps ตามการ์ด ----
+// ---- tab + subnav navigation ----
+function showTab(name,btn){
+  document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('on'));
+  $('tab-'+name).classList.add('on');
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(name==='tables'&&!tblMenu)loadTables();
+  if(name==='log')refreshLog();
+}
+function showDir(tab,dir,btn){
+  ['in','out'].forEach(d=>$(tab+'-'+d).classList.toggle('hidden',d!==dir));
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+// ---- FLOWS registry ----
 const FLOWS={
+  'evolt-seed':{title:'Initialize Evolt — seed ตัวตน OCPI (3 ตาราง)',card:'setup',dir:'setup',method:'POST',url:'/api/demo/evolt/seed',
+    steps:['เขียน ocpi_credentials (is_self, TH/EVT)','เขียน ocpi_credentials_roles (CPO+EMSP)','เขียน ocpi_endpoints (7 endpoint → bff /api/ocpi)','idempotent — มีอยู่แล้วข้าม (insert 0)']},
   'evolt-init':{title:'Handshake — ให้ Evolt เริ่ม',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/evolt-init',
     steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง']},
   'partner-init':{title:'Handshake — Partner เริ่ม (PlugSiam → Evolt)',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/partner-init',
@@ -328,17 +399,17 @@ const FLOWS={
   'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB ฝั่ง partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
     steps:['ลบ registration ใน mock DB','เคลียร์ received_* + request log','seed own catalog ใหม่ (เริ่มสะอาด)','(Evolt ยังจำไว้ — ไม่มี DELETE /credentials)']},
 
-  // Roaming In (เราเป็น CPO)
   'in-loc-pull':{title:'Roaming In · Location — partner ดึง locations ของเรา',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/pull/locations',body:{limit:5},
     steps:['partner ยิง GET /ocpi/cpo/2.2.1/locations (token-in)','bff → orch · orch → core-auth verify token','core-ocpi JOIN stations→chargers→evses→connectors → map OCPI','ห่อ envelope + X-Total-Count → partner']},
-  'in-loc-push-status':{title:'Roaming In · Location — เรา push สถานะตู้',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/evolt/evse-status-event',bodyFrom:()=>({status:val('sel-kafka-status')}),
+  'in-loc-push-status':{title:'Roaming In · Location — เรา push สถานะตู้',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/evolt/evse-status-event',bodyFrom:()=>({status:val('sel-kafka-status'),evse_id:val('sel-push-evse')}),
     steps:['จำลองตู้ online + set ocpp_status ที่เลือก (DB)','produce Kafka event evse_status','roaming consumer → fanout','PATCH /ocpi/emsp/2.2.1/locations/{cc}/{pid}/{loc}/{evse} → partner','partner ตอบ 1000']},
+  'evolt-tariff-backfill':{title:'Roaming In · Tariff — Backfill (seed evolt_ocpi_tariff)',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/evolt/tariff-backfill',
+    steps:['core-ocpi-roaming /internal/tariffs/backfill','วน materialize ทุก station ที่ expose ได้ (seed-only, ไม่ push)','เขียน evolt_ocpi_tariff + location_map_tariff_ocpi','คืน summary: stations/objects/map rows']},
   'in-trf-pull':{title:'Roaming In · Tariff — partner ดึง tariffs ของเรา',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/pull/tariffs',body:{limit:5},
     steps:['partner ยิง GET /ocpi/cpo/2.2.1/tariffs (token-in)','orch → core-auth verify token','core-ocpi-roaming อ่าน tariff BASE/ALT สด + แปลง OCPI','envelope + X-Total-Count / Link → partner']},
   'in-trf-push':{title:'Roaming In · Tariff — เรา push tariff (fanout)',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/evolt/tariff-push',bodyFrom:()=>({station_id:val('sel-station')}),
     steps:['station เปลี่ยนราคา → materialize + fanout (เส้นเดียวกับ consumer จริง)','PUT /ocpi/emsp/2.2.1/tariffs/{cc}/{pid}/{id} → partner','partner ตอบ 1000']},
 
-  // Roaming Out (เราเป็น eMSP)
   'out-loc-push':{title:'Roaming Out · Location — partner push location เข้ามา',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/location',bodyFrom:()=>({location_id:val('sel-location')}),
     steps:['partner ยิง PUT /ocpi/emsp/2.2.1/locations/{cc}/{pid}/{loc} (token-in)','bff → orch → core-auth verify','orch route by URL depth → core-ocpi เขียน ocpi_partner_locations','ตอบ 1000']},
   'out-loc-push-status':{title:'Roaming Out · Location — partner push สถานะตู้',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/evse-status',bodyFrom:()=>({evse_uid:val('sel-evse'),status:val('sel-evse-status')}),
@@ -360,39 +431,31 @@ let modalTimers=[];
 function openModal(f){
   clearTimers();
   $('m-title').textContent=f.title;
-  const dirTag=f.dir==='in'?'<span class="rtag in">ROAMING IN</span>':f.dir==='out'?'<span class="rtag out">ROAMING OUT</span>':'<span class="badge">handshake</span>';
+  const dirTag=f.dir==='in'?'<span class="rtag in">ROAMING IN</span>':f.dir==='out'?'<span class="rtag out">ROAMING OUT</span>':'<span class="badge">setup</span>';
   $('m-meta').innerHTML=`${dirTag} <span class="cardtag">${esc(f.card)}</span> <span style="color:var(--muted)">ลำดับตาม sequence diagram ของทีม</span>`;
   $('m-steps').innerHTML=f.steps.map((s,i)=>`<li id="st-${i}"><span class="n">${i+1}</span><span>${esc(s)}</span></li>`).join('');
-  $('m-result').className='result';
-  $('m-running').style.display='flex';
-  $('modal').classList.add('show');
-  // ทยอยไฮไลต์ step ให้เห็นภาพว่ากำลังเดินตามลำดับ (visual — ผลจริงมาจาก response ด้านล่าง)
+  $('m-result').className='result';$('m-running').style.display='flex';$('modal').classList.add('show');
   f.steps.forEach((_,i)=>modalTimers.push(setTimeout(()=>{const li=$('st-'+i);if(li)li.classList.add('on')},250*(i+1))));
 }
 function finishModal(f,j,httpStatus){
   clearTimers();
   f.steps.forEach((_,i)=>{const li=$('st-'+i);if(li){li.classList.add('on');if(j.ok)li.classList.add('done')}});
   $('m-running').style.display='none';
-  const r=$('m-result');
-  r.className='result show '+(j.ok?'ok':'bad');
+  const r=$('m-result');r.className='result show '+(j.ok?'ok':'bad');
   $('m-rtitle').textContent=j.ok?`✓ สำเร็จ (HTTP ${httpStatus})`:`✗ ไม่สำเร็จ (HTTP ${httpStatus||'—'})`;
   $('m-rbody').innerHTML=j.ok?'':`<span style="color:var(--red)">${esc(j.error||'')}</span>`;
   $('m-rjson').textContent=JSON.stringify(j.ok?j.data:(j.detail||j),null,2);
 }
 function clearTimers(){modalTimers.forEach(clearTimeout);modalTimers=[]}
 function closeModal(){$('modal').classList.remove('show');clearTimers()}
-
-// raw json viewer
 function showJSON(title,obj){$('j-title').textContent=title;$('j-body').textContent=JSON.stringify(obj,null,2);$('jmodal').classList.add('show')}
 function closeJSON(){$('jmodal').classList.remove('show')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeJSON()}});
 
-// ---- run a flow: spinner บนปุ่ม + modal + fetch + result ----
 async function runFlow(key,btn){
   const f=FLOWS[key];if(!f)return;
   const body=f.bodyFrom?f.bodyFrom():f.body;
-  const url=f.urlFrom?f.urlFrom():f.url;
-  const method=f.method||'POST';
+  const url=f.urlFrom?f.urlFrom():f.url;const method=f.method||'POST';
   let restore;
   if(btn){const html=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>'+html;restore=()=>{btn.disabled=false;btn.innerHTML=html}}
   openModal(f);
@@ -401,17 +464,17 @@ async function runFlow(key,btn){
     const r=await api(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
     status=r.status;j=await r.json();
   }catch(e){j={ok:false,error:String(e)}}
-  // ให้ step animation ได้เดินอย่างน้อยจนจบก่อนสรุป (กันจบเร็วเกินจนไม่เห็น)
   const minWait=Math.min(250*f.steps.length,1400);
   setTimeout(()=>finishModal(f,j,status),Math.max(0,minWait-200));
   if(restore)restore();
   refreshState();refreshLog();refreshOwn();refreshPartnerData();refreshMirror();
+  if(tblCur)loadTablePage();
 }
 
+// ---- header state ----
 async function refreshState(){
   try{
-    const r=await api('/api/demo/state');const j=await r.json();
-    if(!j.ok)return;
+    const r=await api('/api/demo/state');const j=await r.json();if(!j.ok)return;
     const d=j.data,p=d.partner;
     badge($('b-partner'),p?`partner: ${p.partner.name} (${p.partner.country_code}-${p.partner.party_id})`:'partner: mock ล่ม',p?'on':'off');
     const reg=(d.partner&&d.partner.registration_status)||'';
@@ -423,8 +486,20 @@ async function refreshState(){
     const sel=$('sel-station');
     if(sel.options.length===0&&(d.allowed_stations||[]).length)
       d.allowed_stations.forEach(s=>sel.add(new Option(s.slice(0,8)+'…',s)));
+    window._st=d;renderHandshake();
     if(p&&p.counts)$('counts').innerHTML=Object.entries(p.counts).map(([k,v])=>`<div>${k}<b>${v}</b></div>`).join('');
   }catch(e){badge($('b-partner'),'partner: demo backend ล่ม','off')}
+}
+
+async function refreshStationEvses(){
+  try{
+    const r=await api('/api/demo/station-evses');const j=await r.json();
+    const sel=$('sel-push-evse');if(!sel)return;
+    if(!j.ok||!j.data){sel.innerHTML='<option value="">(ตั้ง EVOLT_DB_DSN)</option>';return}
+    const keep=sel.value;sel.innerHTML='';
+    j.data.forEach(e=>sel.add(new Option(`${e.ocpi_uid} · ${e.uid} (${e.ocpp_status})`,e.id)));
+    if(keep)sel.value=keep;
+  }catch(e){}
 }
 
 async function refreshOwn(){
@@ -433,19 +508,12 @@ async function refreshOwn(){
       api('/api/demo/own/locations').then(r=>r.json()),
       api('/api/demo/own/tariffs').then(r=>r.json())]);
     if(locs.ok){
-      const sl=$('sel-location'),se=$('sel-evse');
-      const kl=sl.value,ke=se.value;sl.innerHTML='';se.innerHTML='';
-      (locs.data||[]).forEach(l=>{
-        sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
-        (l.evses||[]).forEach(e=>se.add(new Option(`${e.uid} (${l.id})`,e.uid)));
-      });
+      const sl=$('sel-location'),se=$('sel-evse');const kl=sl.value,ke=se.value;sl.innerHTML='';se.innerHTML='';
+      (locs.data||[]).forEach(l=>{sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
+        (l.evses||[]).forEach(e=>se.add(new Option(`${e.uid} (${l.id})`,e.uid)));});
       if(kl)sl.value=kl;if(ke)se.value=ke;
     }
-    if(trfs.ok){
-      const st=$('sel-tariff'),keep=st.value;st.innerHTML='';
-      (trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));
-      if(keep)st.value=keep;
-    }
+    if(trfs.ok){const st=$('sel-tariff'),keep=st.value;st.innerHTML='';(trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));if(keep)st.value=keep;}
   }catch(e){}
 }
 
@@ -459,7 +527,25 @@ function priceLines(p){
   return out;
 }
 
-// สรุป inbound ล่าสุด (Evolt ยิงอะไรเข้ามา + OCPI code)
+// ---- handshake status (both dir panes) ----
+function renderHandshake(){
+  const d=window._st,m=window._mir;if(!d)return;
+  const p=d.partner,reg=(p&&p.registration_status)||'';
+  const html=[];
+  html.push(`<div class="item"><div class="kv"><span>ฝั่ง PlugSiam (partner mock)</span>`+
+    `<span style="color:${reg==='REGISTERED'?'var(--green)':'var(--amber)'}">${reg?esc(reg):'ยังไม่มีทะเบียน'}</span></div>`+
+    (p?`<div class="kv"><span>party</span><span class="mono">${esc(p.partner.country_code)}/${esc(p.partner.party_id)}</span></div>`:'')+`</div>`);
+  if(m&&m.configured){
+    html.push(`<div class="item"><div class="kv"><span>ฝั่ง Evolt รู้จัก PlugSiam?</span>`+
+      `<span style="color:${m.registered?'var(--green)':'var(--amber)'}">${m.registered?'✓ REGISTERED':'ยังไม่รู้จัก'}</span></div>`+
+      (m.registered?`<div class="kv"><span>credentials_id</span><span class="mono">${esc(m.credentials_id)}</span></div>`:'')+`</div>`);
+  }else{
+    html.push(`<div class="empty">อ่านฝั่ง Evolt ไม่ได้ (ยังไม่ตั้งค่า / offline)</div>`);
+  }
+  const out=html.join('');$('res-hs-in').innerHTML=out;$('res-hs-out').innerHTML=out;
+}
+
+// ---- inbound banner ----
 const OCPI_WHY={1000:['ok','partner รับข้อมูลแล้ว'],2001:['bad','ข้อมูลในคำขอไม่ครบ/ผิดรูป'],
   2003:['bad','partner ไม่รู้จัก object นี้ (ยังไม่มี baseline หรือ party/uid ไม่ตรง)'],3000:['bad','ฝั่ง partner พังภายใน']};
 let lastInbound=null;
@@ -473,21 +559,18 @@ function inboundBanner(){
     `<div class="when mono" style="margin-top:4px">${esc(lastInbound.path)}</div></div>`;
 }
 
-// ---- แผง IN: ของที่ partner ได้รับจากเรา (mock received_*) ----
-let inData={};
+// ---- IN result panes (partner received_*) ----
 async function refreshPartnerData(){
   try{
     const [locs,trfs]=await Promise.all([
       api('/api/demo/received/locations').then(r=>r.json()),
       api('/api/demo/received/tariffs').then(r=>r.json())]);
-    inData={locs:locs.data,trfs:trfs.data};
-    const html=[];
-    if(lastInbound)html.push(inboundBanner());
+    // locations -> res-loc-in
+    const lh=[];if(lastInbound)lh.push(inboundBanner());
     const evsesByLoc={};
     ((locs.data||{}).evses||[]).forEach(e=>{const loc=(e.key||'').split('/')[0];(evsesByLoc[loc]=evsesByLoc[loc]||[]).push(e)});
     const locations=(locs.data||{}).locations||[];
-    html.push('<div class="mini" style="margin:2px 0 6px">🔌 สถานีของ <b style="color:var(--in)">Evolt</b> + สถานะหัวชาร์จ <span class="mono">(party ในข้อมูล = TH/EVT)</span></div>');
-    if(!locations.length)html.push('<div class="empty">ยังไม่มีข้อมูลของ Evolt ที่นี่<br>กด Roaming In · Location (ดึง / ยิง event)</div>');
+    if(!locations.length)lh.push('<div class="empty">ยังไม่มีตู้ของ Evolt ที่นี่<br>กด Roaming In (ดึง / ยิง event)</div>');
     locations.forEach(l=>{
       const p=asObj(l.payload);
       const chips=(evsesByLoc[l.key]||[]).map(e=>{
@@ -496,88 +579,147 @@ async function refreshPartnerData(){
       }).join('');
       const evseWhen=(evsesByLoc[l.key]||[]).map(e=>e.last_updated).sort().pop();
       const f=changed('loc:'+l.key,l.last_updated+evseWhen)?' flash':'';
-      html.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
+      lh.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
         `<span class="when">${esc(l.country_code+'/'+l.party_id)} · <button class="ghost" onclick='showJSON("received location",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
         `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
-        `<div class="when" style="margin-top:6px">อัปเดตล่าสุด: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
+        `<div class="when" style="margin-top:6px">อัปเดต: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
     });
-    const tariffs=(trfs.data||{}).tariffs||[];
-    html.push('<div class="mini" style="margin:12px 0 6px">💰 ราคาของ <b style="color:var(--in)">Evolt</b> ที่ push มา</div>');
-    if(!tariffs.length)html.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (สั่ง push)</div>');
+    $('res-loc-in').innerHTML=lh.join('');
+    // tariffs -> res-trf-in
+    const th=[];const tariffs=(trfs.data||{}).tariffs||[];
+    if(!tariffs.length)th.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (สั่ง push)</div>');
     tariffs.forEach(t=>{
       const p=asObj(t.payload),f=changed('rtrf:'+t.key,JSON.stringify(p.elements||[])+t.last_updated)?' flash':'';
       const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
-      html.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
+      th.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
         `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
         priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
         `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
     });
-    $('pane-in').innerHTML=html.join('');
+    $('res-trf-in').innerHTML=th.join('');
   }catch(e){}
 }
 
-// ---- แผง OUT: ของ partner ที่ Evolt เก็บ (mirror) ----
-let outData={};
+// ---- OUT result panes (evolt ocpi_partner_*) ----
 async function refreshMirror(){
   try{
     const tid=$('sel-tariff').value;
     const r=await api('/api/demo/evolt/mirror'+(tid?'?tariff_id='+encodeURIComponent(tid):''));
-    const j=await r.json();outData=j.data;
-    if(!j.ok){$('pane-out').innerHTML='<div class="empty">อ่านฝั่ง Evolt ไม่ได้</div>';return}
-    const d=j.data,html=[];
-    if(!d.configured){$('pane-out').innerHTML='<div class="empty">ยังไม่ได้ตั้งค่า EVOLT_COREAUTH_URL / EVOLT_ROAMING_URL</div>';return}
-    if(!d.registered){
-      html.push(`<div class="empty">Evolt ยังไม่รู้จัก ${esc(d.country_code+'/'+d.party_id)}<br>กด Handshake ก่อน</div>`);
-    }else{
-      html.push(`<div class="item"><div class="kv"><span>ทะเบียน PlugSiam ในระบบ Evolt</span><span style="color:var(--green)">✓ REGISTERED</span></div>`+
-        `<div class="kv"><span>credentials_id ที่ Evolt ออกให้</span><span class="mono">${esc(d.credentials_id)}</span></div></div>`);
-      [['locations','🔌 Locations ของ PlugSiam ที่ Evolt เก็บ','EV-1561'],['tariffs','💰 Tariffs ของ PlugSiam ที่ Evolt เก็บ','EV-1585']].forEach(([k,label,card])=>{
-        const w=(d[k]||{}).date_from,f=changed('wm:'+k,String(w))?' flash':'';
-        html.push(`<div class="item${f}"><div class="top"><span class="name">${label} <span class="cardtag">${card}</span></span>`+
-          `<span class="when">${w?esc(ago(w)):'—'}</span></div>`+
-          `<div class="when">${w?'ข้อมูลล่าสุดที่เก็บ: <span class="mono">'+esc(thTime(w))+'</span>':'ยังไม่มีข้อมูลจาก PlugSiam — กด Roaming Out · '+(k==='locations'?'Location':'Tariff')}</div></div>`);
-      });
-      if(d.tariff){
-        const p=asObj(d.tariff),f=changed('mtrf:'+d.tariff_id,JSON.stringify(p))?' flash':'';
-        html.push(`<div class="item${f}"><div class="top"><span class="name">💰 ราคาของ PlugSiam ที่ Evolt เก็บ (อ่านกลับ)</span>`+
-          `<span class="when"><button class="ghost" onclick='showJSON("evolt stored tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
-          priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
-          `<div class="when mono" style="margin-top:6px">${esc(d.tariff_id)}</div></div>`);
-      }else if($('sel-tariff').value){
-        html.push(`<div class="empty">Evolt ยังไม่มี tariff <span class="mono">${esc($('sel-tariff').value)}</span><br>กด Roaming Out · Tariff (PUT) แล้วดูค่ากลับมาที่นี่</div>`);
-      }
+    const j=await r.json();window._mir=j.data;renderHandshake();
+    if(!j.ok||!j.data){$('res-loc-out').innerHTML='<div class="empty">อ่านฝั่ง Evolt ไม่ได้</div>';return}
+    const d=j.data;
+    if(!d.configured){const m='<div class="empty">ยังไม่ได้ตั้งค่า EVOLT_COREAUTH_URL / EVOLT_ROAMING_URL</div>';$('res-loc-out').innerHTML=m;$('res-trf-out').innerHTML=m;return}
+    if(!d.registered){const m=`<div class="empty">Evolt ยังไม่รู้จัก ${esc(d.country_code+'/'+d.party_id)}<br>กด Handshake ก่อน</div>`;$('res-loc-out').innerHTML=m;$('res-trf-out').innerHTML=m;return}
+    // locations out
+    const lh=[];
+    const wl=(d.locations||{}).date_from,fl=changed('wm:locations',String(wl))?' flash':'';
+    lh.push(`<div class="item${fl}"><div class="top"><span class="name">🔌 Locations ของ PlugSiam <span class="cardtag">EV-1561</span></span>`+
+      `<span class="when">${wl?esc(ago(wl)):'—'}</span></div>`+
+      `<div class="when">${wl?'ข้อมูลล่าสุด: <span class="mono">'+esc(thTime(wl))+'</span>':'ยังไม่มี — กด Roaming Out · Location'}</div></div>`);
+    (d.notes||[]).forEach(n=>lh.push(`<div class="note">⚠️ ${esc(n)}</div>`));
+    $('res-loc-out').innerHTML=lh.join('');
+    // tariff out
+    const th=[];const wt=(d.tariffs||{}).date_from,ft=changed('wm:tariffs',String(wt))?' flash':'';
+    th.push(`<div class="item${ft}"><div class="top"><span class="name">💰 Tariffs ของ PlugSiam <span class="cardtag">EV-1585</span></span>`+
+      `<span class="when">${wt?esc(ago(wt)):'—'}</span></div>`+
+      `<div class="when">${wt?'ข้อมูลล่าสุด: <span class="mono">'+esc(thTime(wt))+'</span>':'ยังไม่มี — กด Roaming Out · Tariff'}</div></div>`);
+    if(d.tariff){
+      const p=asObj(d.tariff),f=changed('mtrf:'+d.tariff_id,JSON.stringify(p))?' flash':'';
+      th.push(`<div class="item${f}"><div class="top"><span class="name">ราคาที่ Evolt เก็บ (อ่านกลับ)</span>`+
+        `<span class="when"><button class="ghost" onclick='showJSON("evolt stored tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
+        priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+        `<div class="when mono" style="margin-top:6px">${esc(d.tariff_id)}</div></div>`);
+    }else if(tid){
+      th.push(`<div class="empty">Evolt ยังไม่มี tariff <span class="mono">${esc(tid)}</span><br>กด Roaming Out · Tariff (PUT)</div>`);
     }
-    (d.notes||[]).forEach(n=>html.push(`<div class="note">⚠️ ${esc(n)}</div>`));
-    $('pane-out').innerHTML=html.join('');
+    $('res-trf-out').innerHTML=th.join('');
   }catch(e){}
 }
 
-async function clearLog(btn){
-  const html=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>เคลียร์…';
-  try{await api('/api/demo/requests/clear',{method:'POST'})}catch(e){}
-  btn.disabled=false;btn.innerHTML=html;
-  lastInbound=null;refreshLog();refreshPartnerData();
+// ---- request log ----
+let logRows=[],logFilter={mod:'all',dir:'all'};
+function moduleOf(p){p=p||'';if(/\/tariffs/.test(p))return 'tariff';if(/\/locations/.test(p))return 'location';
+  if(/\/credentials|\/versions|\/2\.2\.1/.test(p))return 'handshake';return 'other';}
+function setLogFilter(kind,v,btn){
+  logFilter[kind]=v;btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderLog();
 }
-
-let logRows=[];
+function renderLog(){
+  const rows=logRows.filter(e=>(logFilter.mod==='all'||moduleOf(e.path)===logFilter.mod)&&(logFilter.dir==='all'||e.direction===logFilter.dir));
+  $('log').querySelector('tbody').innerHTML=rows.map(e=>{
+    const okc=e.ocpi_status_code===1000?'code-ok':(e.ocpi_status_code?'code-bad':'');
+    return `<tr onclick='showJSON("request log",${JSON.stringify(e).replace(/'/g,"&#39;")})'><td>${esc(thTime(e.ts))}</td>`+
+      `<td><span class="mtag">${esc(moduleOf(e.path))}</span></td>`+
+      `<td class="dir-${e.direction}">${e.direction==='in'?'🟢 in':'🟣 out'}</td>`+
+      `<td>${esc(e.method)}</td><td class="path">${esc(e.path)}</td><td>${e.http_status||''}</td>`+
+      `<td class="${okc}">${e.ocpi_status_code||''}</td><td>${esc(e.counterparty||'')}</td></tr>`;
+  }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:14px">— ไม่มี log ตามตัวกรอง —</td></tr>';
+}
 async function refreshLog(){
   try{
-    const r=await api('/api/demo/requests?limit=50');const j=await r.json();
-    if(!j.ok)return;
+    const r=await api('/api/demo/requests?limit=100');const j=await r.json();if(!j.ok)return;
     logRows=j.data||[];
     const inb=logRows.find(e=>e.direction==='in'&&e.method!=='GET');
     if(inb&&(!lastInbound||lastInbound.ts!==inb.ts)){lastInbound=inb;refreshPartnerData()}
-    $('log').querySelector('tbody').innerHTML=logRows.map((e,i)=>{
-      const okc=e.ocpi_status_code===1000?'code-ok':(e.ocpi_status_code?'code-bad':'');
-      return `<tr onclick='showJSON("request log",${JSON.stringify(e).replace(/'/g,"&#39;")})'><td>${esc(thTime(e.ts))}</td>`+
-        `<td class="dir-${e.direction}">${e.direction==='in'?'⇦ เข้า':'⇨ ออก'}</td>`+
-        `<td>${esc(e.method)}</td><td class="path">${esc(e.path)}</td><td>${e.http_status||''}</td>`+
-        `<td class="${okc}">${e.ocpi_status_code||''}</td><td>${esc(e.counterparty||'')}</td></tr>`;
-    }).join('');
+    renderLog();
   }catch(e){}
 }
+async function clearLog(btn){
+  const html=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>เคลียร์…';
+  try{await api('/api/demo/requests/clear',{method:'POST'})}catch(e){}
+  btn.disabled=false;btn.innerHTML=html;lastInbound=null;refreshLog();refreshPartnerData();
+}
 
-refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();
+// ---- table browser ----
+let tblMenu=null,tblSide='evolt',tblCur=null,tblCol='',tblQ='',tblPage=1;
+async function loadTables(){
+  try{
+    const r=await api('/api/demo/tables');const j=await r.json();
+    if(!j.ok){$('tbl-list').innerHTML='<div class="empty">'+esc(j.error||'ไม่มี DB')+'</div>';return}
+    tblMenu=j.data;renderTableList();
+  }catch(e){$('tbl-list').innerHTML='<div class="empty">โหลดรายการตารางไม่ได้</div>'}
+}
+function pickSide(side,btn){
+  tblSide=side;btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderTableList();
+}
+function renderTableList(){
+  if(!tblMenu)return;
+  $('tbl-list').innerHTML=(tblMenu[tblSide]||[]).map(t=>
+    `<button class="${t.table===tblCur?'on':''}" onclick='openTable(${JSON.stringify(t.table)})'>${esc(t.table)}</button>`).join('');
+}
+function openTable(name){
+  tblCur=name;tblCol='';tblQ='';tblPage=1;renderTableList();
+  const cols=((tblMenu[tblSide]||[]).find(t=>t.table===name)||{}).columns||[];
+  $('tbl-bar').innerHTML=`<select id="f-col"><option value="">— เลือก column ที่จะค้นหา —</option>`+
+    cols.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')+`</select>`+
+    `<input id="f-q" placeholder="ค่าที่ค้นหา…" onkeydown="if(event.key==='Enter')doSearch()">`+
+    `<button onclick="doSearch()">ค้นหา</button>`+
+    `<button class="ghost" onclick="clearSearch()">ล้าง</button>`+
+    `<span class="cnt" id="tbl-cnt"></span>`;
+  loadTablePage();
+}
+function doSearch(){tblCol=$('f-col').value;tblQ=$('f-q').value.trim();tblPage=1;loadTablePage();}
+function clearSearch(){if($('f-col'))$('f-col').value='';if($('f-q'))$('f-q').value='';tblCol='';tblQ='';tblPage=1;loadTablePage();}
+async function loadTablePage(){
+  if(!tblCur)return;
+  const qs=new URLSearchParams({page:tblPage});if(tblCol&&tblQ){qs.set('col',tblCol);qs.set('q',tblQ)}
+  try{
+    const r=await api(`/api/demo/table/${encodeURIComponent(tblCur)}?${qs}`);const j=await r.json();
+    if(!j.ok){$('tbl-grid').innerHTML=`<tr><td style="color:var(--red);padding:10px">${esc(j.error||'error')}</td></tr>`;$('tbl-page').innerHTML='';return}
+    const d=j.data;
+    $('tbl-grid').innerHTML=`<thead><tr>${d.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>`+
+      `<tbody>`+(d.rows.length?d.rows.map(row=>`<tr>${row.map(v=>v===null?'<td class="nullv">∅</td>':`<td title="${esc(v)}">${esc(v)}</td>`).join('')}</tr>`).join('')
+        :`<tr><td colspan="${d.columns.length}" style="text-align:center;color:var(--muted);padding:14px">— ไม่มีแถว —</td></tr>`)+`</tbody>`;
+    if($('tbl-cnt'))$('tbl-cnt').textContent=`${d.total} แถว`;
+    $('tbl-page').innerHTML=`<button class="ghost" ${d.page<=1?'disabled':''} onclick="tblPage=${d.page-1};loadTablePage()">← ก่อน</button>`+
+      `<span>หน้า ${d.page} / ${d.pages}</span>`+
+      `<button class="ghost" ${d.page>=d.pages?'disabled':''} onclick="tblPage=${d.page+1};loadTablePage()">ถัดไป →</button>`+
+      `<span style="margin-left:auto">${d.page_size}/หน้า</span>`;
+  }catch(e){$('tbl-grid').innerHTML='<tr><td style="padding:10px">โหลดไม่ได้</td></tr>'}
+}
+
+// ---- boot ----
+refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();refreshStationEvses();
+setInterval(refreshStationEvses,8000);
 setInterval(refreshState,3000);
 setInterval(refreshLog,3000);
 setInterval(refreshPartnerData,2500);

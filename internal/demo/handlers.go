@@ -15,6 +15,8 @@ import (
 var evseStatuses = map[string]bool{
 	"AVAILABLE": true, "CHARGING": true, "BLOCKED": true,
 	"INOPERATIVE": true, "OUTOFORDER": true,
+	"FINISHING": true, "RESERVED": true, "PLANNED": true,
+	"REMOVED": true, "UNKNOWN": true,
 }
 
 type Handlers struct {
@@ -23,10 +25,11 @@ type Handlers struct {
 	evolt   *Evolt
 	kafka   *Kafka
 	charger *ChargerDB // nil when the charger simulator is not configured
+	db      *DBBrowser // nil when no DB is configured (table browser + evolt seed off)
 }
 
-func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka, charger *ChargerDB) *Handlers {
-	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger}
+func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka, charger *ChargerDB, db *DBBrowser) *Handlers {
+	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger, db: db}
 }
 
 func ok(c echo.Context, data any) error {
@@ -407,6 +410,17 @@ func (h *Handlers) EvoltPull(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
+// EvoltTariffBackfill seeds evolt_ocpi_tariff + location_map_tariff_ocpi for every exposable station
+// (core-ocpi-roaming /internal/tariffs/backfill). Roaming In tariff pull/push read from these tables,
+// so this is the one-time seed to run before them.
+func (h *Handlers) EvoltTariffBackfill(c echo.Context) error {
+	result, err := h.evolt.RoamingTariffBackfill(c.Request().Context())
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, json.RawMessage(result))
+}
+
 func (h *Handlers) EvoltTariffPush(c echo.Context) error {
 	var req struct {
 		StationID string `json:"station_id"`
@@ -439,9 +453,10 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 	}
 	var req struct {
 		Status string `json:"status"`
+		EvseID string `json:"evse_id"` // optional: evses.id (uuid) of a demo-station EVSE; empty = the configured default
 	}
 	if err := c.Bind(&req); err != nil || !evseStatuses[req.Status] {
-		return fail(c, http.StatusBadRequest, "status must be one of AVAILABLE, CHARGING, BLOCKED, INOPERATIVE, OUTOFORDER", nil)
+		return fail(c, http.StatusBadRequest, "status must be a valid EVSE status", nil)
 	}
 	ctx := c.Request().Context()
 	seeded, err := h.ensureKafkaBaseline(ctx)
@@ -449,8 +464,30 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		return failFrom(c, err)
 	}
 
-	// Flip the demo EVSE online first so Evolt derives the picked status instead of UNKNOWN. Without
-	// the simulator the event still fires, but the pushed status is whatever the DB already holds.
+	// Targeted path: flip and fire for a chosen demo-station EVSE, deriving its identifiers from the DB.
+	if req.EvseID != "" {
+		if h.db == nil {
+			return fail(c, http.StatusBadRequest, "cannot target an EVSE without EVOLT_DB_DSN", nil)
+		}
+		target, err := h.resolveDemoEvse(ctx, req.EvseID)
+		if err != nil {
+			return fail(c, http.StatusBadRequest, err.Error(), nil)
+		}
+		if _, err := h.db.SimulateEvseOnline(ctx, target.ID, req.Status); err != nil {
+			return fail(c, http.StatusBadGateway, "charger simulate failed: "+err.Error(), nil)
+		}
+		if err := h.kafka.ProduceEvseStatusFor(ctx, req.Status, h.cfg.KafkaStationID, target.UID, target.ID); err != nil {
+			return fail(c, http.StatusBadGateway, err.Error(), nil)
+		}
+		return ok(c, map[string]any{
+			"produced": true, "baseline_seeded": seeded, "simulated_status": req.Status,
+			"charger_online": true, "evse": target.UID,
+			"note": "consumer should PATCH the mock within ~5s — watch the request log",
+		})
+	}
+
+	// Default path: the configured demo EVSE via ChargerDB. Flip online first so Evolt derives the
+	// picked status instead of UNKNOWN; without the simulator the event still fires with the DB's value.
 	simulated := false
 	if h.charger != nil {
 		if _, err := h.charger.SimulateOnline(ctx, req.Status); err != nil {
@@ -458,7 +495,6 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		}
 		simulated = true
 	}
-
 	if err := h.kafka.ProduceEvseStatus(ctx, req.Status); err != nil {
 		return fail(c, http.StatusBadGateway, err.Error(), nil)
 	}
@@ -473,6 +509,33 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		"charger_online":   simulated,
 		"note":             note,
 	})
+}
+
+// resolveDemoEvse looks up a chosen EVSE id among the demo station's EVSEs, so the id can never point
+// outside that station.
+func (h *Handlers) resolveDemoEvse(ctx context.Context, id string) (DemoEvse, error) {
+	evses, err := h.db.DemoStationEvses(ctx)
+	if err != nil {
+		return DemoEvse{}, err
+	}
+	for _, e := range evses {
+		if e.ID == id {
+			return e, nil
+		}
+	}
+	return DemoEvse{}, fmt.Errorf("evse %s is not in the demo station", id)
+}
+
+// StationEvses lists the demo station's EVSEs so the UI can offer them as status-push targets.
+func (h *Handlers) StationEvses(c echo.Context) error {
+	if h.db == nil {
+		return fail(c, http.StatusBadRequest, "EVOLT_DB_DSN not configured — no station EVSEs", nil)
+	}
+	evses, err := h.db.DemoStationEvses(c.Request().Context())
+	if err != nil {
+		return fail(c, http.StatusBadGateway, err.Error(), nil)
+	}
+	return ok(c, evses)
 }
 
 // ensureKafkaBaseline injects a minimal received location for the configured
@@ -496,16 +559,25 @@ func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
 			}
 		}
 	}
+	// Seed every demo-station EVSE into the baseline so a PATCH to any chosen head lands (no 2003).
+	// Falls back to the single configured EVSE when the DB is unavailable.
+	var evses []map[string]any
+	if h.db != nil {
+		if list, err := h.db.DemoStationEvses(ctx); err == nil {
+			for _, e := range list {
+				evses = append(evses, map[string]any{"uid": e.OCPIUID, "status": "UNKNOWN", "last_updated": "2020-01-01T00:00:00Z"})
+			}
+		}
+	}
+	if len(evses) == 0 {
+		evses = []map[string]any{{"uid": h.cfg.KafkaOCPIEvseUID, "status": "UNKNOWN", "last_updated": "2020-01-01T00:00:00Z"}}
+	}
 	baseline := map[string]any{
 		"id":           h.cfg.KafkaStationID,
 		"country_code": h.cfg.KafkaPartyCC,
 		"party_id":     h.cfg.KafkaPartyID,
 		"name":         "demo baseline",
-		"evses": []map[string]any{{
-			"uid":          h.cfg.KafkaOCPIEvseUID,
-			"status":       "UNKNOWN",
-			"last_updated": "2020-01-01T00:00:00Z",
-		}},
+		"evses":        evses,
 		"last_updated": "2020-01-01T00:00:00Z",
 	}
 	if _, err := h.mock.Post(ctx, "/admin/received/locations", map[string]any{
@@ -594,4 +666,46 @@ func (h *Handlers) Reset(c echo.Context) error {
 		return failFrom(c, err)
 	}
 	return ok(c, json.RawMessage(result))
+}
+
+// InitEvolt seeds Evolt's own OCPI identity (is_self row + roles + endpoints) into aurora_dev. It is
+// the UI's one-click restore for the self-registration a partner-clear can wipe; idempotent, so a
+// second press just reports zeros.
+func (h *Handlers) InitEvolt(c echo.Context) error {
+	if h.db == nil {
+		return fail(c, http.StatusBadRequest, "EVOLT_DB_DSN not configured — cannot seed Evolt identity", nil)
+	}
+	inserted, err := h.db.SeedEvoltSelf(c.Request().Context())
+	if err != nil {
+		return fail(c, http.StatusBadGateway, err.Error(), nil)
+	}
+	return ok(c, map[string]any{"inserted": inserted})
+}
+
+// Tables lists the browsable tables per side so the UI can build its Tables menu.
+func (h *Handlers) Tables(c echo.Context) error {
+	if h.db == nil {
+		return fail(c, http.StatusBadRequest, "no database configured — table browser unavailable", nil)
+	}
+	return ok(c, h.db.Menu())
+}
+
+// BrowseTable returns one page of a whitelisted table with an optional per-column filter.
+func (h *Handlers) BrowseTable(c echo.Context) error {
+	if h.db == nil {
+		return fail(c, http.StatusBadRequest, "no database configured — table browser unavailable", nil)
+	}
+	page := 1
+	if v := c.QueryParam("page"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return fail(c, http.StatusBadRequest, "page must be >= 1", nil)
+		}
+		page = n
+	}
+	res, err := h.db.Query(c.Request().Context(), c.Param("table"), c.QueryParam("col"), c.QueryParam("q"), page)
+	if err != nil {
+		return fail(c, http.StatusBadRequest, err.Error(), nil)
+	}
+	return ok(c, res)
 }

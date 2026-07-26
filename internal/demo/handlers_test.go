@@ -100,7 +100,7 @@ func newHandlers(t *testing.T, cfg Config, mockSrv, evoltSrv *httptest.Server) *
 			cfg.EvoltVersionsURL = evoltSrv.URL + "/api/ocpi/versions"
 		}
 	}
-	return NewHandlers(cfg, NewMockAdmin(cfg), NewEvolt(cfg), NewKafka(Config{}), nil)
+	return NewHandlers(cfg, NewMockAdmin(cfg), NewEvolt(cfg), NewKafka(Config{}), nil, nil)
 }
 
 const stateBody = `{"partner":{"name":"PlugSiam","party_id":"PLG","country_code":"TH"},"registration_status":"REGISTERED","counts":{"own_locations":4}}`

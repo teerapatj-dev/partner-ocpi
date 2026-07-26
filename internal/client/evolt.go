@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -438,6 +439,7 @@ type PullResult struct {
 	OCPIStatusCode int             `json:"ocpi_status_code"`
 	Total          *int            `json:"total,omitempty"`
 	Items          json.RawMessage `json:"items,omitempty"`
+	Stored         *int            `json:"stored,omitempty"`
 }
 
 // PullFromCounterparty GETs the first page of the counterparty's SENDER list
@@ -469,5 +471,54 @@ func (c *Client) PullFromCounterparty(ctx context.Context, identifier string, li
 		return out, fmt.Errorf("parse %s page: %w", identifier, err)
 	}
 	out.Items = items
+	// A real eMSP caches what it pulls; do the same so the pulled objects land in received_* and the
+	// demo's partner-side panels/tables show them (best-effort — a store slip never fails the pull).
+	if n := c.cachePulled(ctx, identifier, items, reg.CountryCode, reg.PartyID); n > 0 {
+		out.Stored = &n
+	}
 	return out, nil
+}
+
+// cachePulled writes each pulled CPO object into received_* (locations explode into evses/connectors).
+// country_code/party_id come off each object, falling back to the counterparty's when absent.
+func (c *Client) cachePulled(ctx context.Context, kind string, items json.RawMessage, fbCC, fbPID string) int {
+	var arr []json.RawMessage
+	if err := json.Unmarshal(items, &arr); err != nil {
+		return 0
+	}
+	stored := 0
+	for _, raw := range arr {
+		var obj struct {
+			CountryCode string `json:"country_code"`
+			PartyID     string `json:"party_id"`
+			ID          string `json:"id"`
+			LastUpdated string `json:"last_updated"`
+		}
+		if err := json.Unmarshal(raw, &obj); err != nil || obj.ID == "" {
+			continue
+		}
+		cc, pid := strings.ToUpper(obj.CountryCode), strings.ToUpper(obj.PartyID)
+		if cc == "" {
+			cc = strings.ToUpper(fbCC)
+		}
+		if pid == "" {
+			pid = strings.ToUpper(fbPID)
+		}
+		lu, err := time.Parse(time.RFC3339, obj.LastUpdated)
+		if err != nil {
+			lu = time.Now().UTC()
+		}
+		switch kind {
+		case "locations":
+			err = c.st.PutReceivedLocationObject(ctx, store.ObjectKey{CountryCode: cc, PartyID: pid, LocationID: obj.ID}, raw, lu)
+		case "tariffs":
+			err = c.st.PutReceivedTariff(ctx, cc, pid, obj.ID, raw, lu)
+		}
+		if err != nil {
+			log.Warn().Err(err).Str("kind", kind).Str("id", obj.ID).Msg("pull: cache object failed")
+			continue
+		}
+		stored++
+	}
+	return stored
 }
