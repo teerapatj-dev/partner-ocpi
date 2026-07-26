@@ -133,7 +133,15 @@ func NewDBBrowser(ctx context.Context, evoltDSN, partnerDSN, demoStationID strin
 }
 
 func openPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	// Render timestamptz in Bangkok time so the grid matches the wall clock the
+	// team reads; without this ::text falls back to UTC and every synced_at looks
+	// 7h stale.
+	cfg.ConnConfig.RuntimeParams["timezone"] = "Asia/Bangkok"
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
