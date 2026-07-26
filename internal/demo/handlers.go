@@ -24,12 +24,13 @@ type Handlers struct {
 	mock    *MockAdmin
 	evolt   *Evolt
 	kafka   *Kafka
-	charger *ChargerDB // nil when the charger simulator is not configured
-	db      *DBBrowser // nil when no DB is configured (table browser + evolt seed off)
+	charger *ChargerDB   // nil when the charger simulator is not configured
+	db      *DBBrowser   // nil when no DB is configured (table browser + evolt seed off)
+	batch   *BatchRunner // nil when the batch binaries are not mounted (cron buttons off)
 }
 
-func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka, charger *ChargerDB, db *DBBrowser) *Handlers {
-	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger, db: db}
+func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka, charger *ChargerDB, db *DBBrowser, batch *BatchRunner) *Handlers {
+	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger, db: db, batch: batch}
 }
 
 func ok(c echo.Context, data any) error {
@@ -79,6 +80,7 @@ func (h *Handlers) State(c echo.Context) error {
 			"reachable":  h.evolt.Reachable(ctx),
 		},
 		"kafka":            map[string]any{"enabled": kafkaEnabled, "reason": kafkaReason},
+		"batch_jobs":       h.batch.Jobs(),
 		"allowed_stations": h.cfg.AllowedStations,
 		"public_base_url":  h.cfg.PublicBaseURL,
 		"degraded":         degraded,
@@ -379,35 +381,24 @@ func (h *Handlers) PartnerPull(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
-// EvoltPull: Evolt's adapter pulls a page of the mock's CPO list — the demo
-// supplies the token Evolt holds (the mock's inbound token), standing in for
-// the roaming pull cron that owns this call in production.
-func (h *Handlers) EvoltPull(c echo.Context) error {
-	kind := c.Param("kind")
-	if kind != "locations" && kind != "tariffs" {
-		return fail(c, http.StatusBadRequest, "kind must be locations or tariffs", nil)
+// EvoltBatchRun starts one Roaming Out cron job — the real batch-ocpi-process binary a k8s CronJob
+// runs on dev. A job that exits non-zero still answers 200 with its exit code and log: that outcome
+// is what the demo exists to show. Only a job that could not be started at all is an error here.
+func (h *Handlers) EvoltBatchRun(c echo.Context) error {
+	var req struct {
+		DryRun bool `json:"dry_run"`
 	}
-	limit, err := bindLimit(c, 5, 20)
+	// The body is optional — an absent one means a real run.
+	_ = c.Bind(&req)
+
+	result, err := h.batch.Run(c.Request().Context(), c.Param("job"), req.DryRun)
 	if err != nil {
+		if errors.Is(err, errBatchUnavailable) {
+			return fail(c, http.StatusConflict, err.Error(), nil)
+		}
 		return fail(c, http.StatusBadRequest, err.Error(), nil)
 	}
-	ctx := c.Request().Context()
-	tokenInbound, _, status, err := h.mock.CurrentTokens(ctx)
-	if err != nil {
-		return failFrom(c, err)
-	}
-	if status != "REGISTERED" || tokenInbound == "" {
-		return fail(c, http.StatusConflict, "no completed registration — run a handshake first", nil)
-	}
-	pullURL := h.cfg.MockBaseURL
-	if h.cfg.PublicBaseURL != "" {
-		pullURL = h.cfg.PublicBaseURL
-	}
-	result, err := h.evolt.AdapterPull(ctx, kind, pullURL+"/ocpi/cpo/2.2.1/"+kind, tokenInbound, limit)
-	if err != nil {
-		return failFrom(c, err)
-	}
-	return ok(c, json.RawMessage(result))
+	return ok(c, result)
 }
 
 // EvoltTariffBackfill seeds evolt_ocpi_tariff + location_map_tariff_ocpi for every exposable station

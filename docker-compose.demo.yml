@@ -37,6 +37,13 @@ services:
       # Evolt's CPO tariffs feed builds every object before paging, so one page
       # costs ~19s no matter the limit. The chain has to outlast that.
       DEMO_TIMEOUT_SECONDS: ${DEMO_TIMEOUT_SECONDS:-60}
+      # Roaming Out cron buttons run the real batch-ocpi-process binaries from the mount below;
+      # `make batch-jobs` fills it. Empty dir = buttons report themselves unavailable.
+      BATCH_JOBS_DIR: /batch
+      BATCH_APP_ENV: ${BATCH_APP_ENV:-dev}
+      BATCH_TOKEN_ENCRYPTION_KEY: ${BATCH_TOKEN_ENCRYPTION_KEY:-}
+    volumes:
+      - ./deploy/batch-jobs:/batch:ro
     ports:
       - "9100:8080"
 

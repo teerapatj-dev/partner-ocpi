@@ -240,8 +240,10 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
           <button class="out" onclick="runFlow('out-loc-push-status',this)">PATCH</button></div>
         <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
-        <div class="act"><span class="lbl">pull (cron)</span>
-          <button class="out" onclick="runFlow('out-loc-pull',this)">ดึงผ่าน adapter</button></div>
+        <div class="act"><span class="lbl">cronjob จริง</span>
+          <button class="out" id="btn-cron-loc" onclick="runFlow('out-loc-cron',this)">▶ locations_pull</button>
+          <button class="ghost" id="btn-cron-loc-dry" onclick="runFlow('out-loc-cron-dry',this)">dry-run</button></div>
+        <p class="mini" id="cron-loc-hint"></p>
       </div>
       <div class="rpanel out"><h3>🟪 ตู้ของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">ocpi_partner_*</span></h3>
         <p class="mini">party ในข้อมูล = TH/PLG · ดูตารางเต็มที่แท็บ Tables</p><div id="res-loc-out"></div></div>
@@ -281,8 +283,10 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="out" onclick="runFlow('out-trf-push',this)">PUT (upsert)</button>
           <button class="danger" onclick="runFlow('out-trf-del',this)">DELETE (soft)</button></div>
         <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
-        <div class="act"><span class="lbl">pull (cron)</span>
-          <button class="out" onclick="runFlow('out-trf-pull',this)">ดึงผ่าน adapter</button></div>
+        <div class="act"><span class="lbl">cronjob จริง</span>
+          <button class="out" id="btn-cron-trf" onclick="runFlow('out-trf-cron',this)">▶ tariffs_pull</button>
+          <button class="ghost" id="btn-cron-trf-dry" onclick="runFlow('out-trf-cron-dry',this)">dry-run</button></div>
+        <p class="mini" id="cron-trf-hint"></p>
       </div>
       <div class="rpanel out"><h3>🟪 ราคาของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">อ่านกลับ</span></h3>
         <p class="mini">เลือก tariff ด้านซ้ายเพื่ออ่านค่าที่ Evolt เก็บ</p><div id="res-trf-out"></div></div>
@@ -414,14 +418,18 @@ const FLOWS={
     steps:['partner ยิง PUT /ocpi/emsp/2.2.1/locations/{cc}/{pid}/{loc} (token-in)','bff → orch → core-auth verify','orch route by URL depth → core-ocpi เขียน ocpi_partner_locations','ตอบ 1000']},
   'out-loc-push-status':{title:'Roaming Out · Location — partner push สถานะตู้',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/evse-status',bodyFrom:()=>({evse_uid:val('sel-evse'),status:val('sel-evse-status')}),
     steps:['partner ยิง PATCH .../locations/{loc}/{evse_uid} (token-in)','orch route → core-ocpi เขียน ocpi_partner_evses (partial)','ตอบ 1000']},
-  'out-loc-pull':{title:'Roaming Out · Location — เรา pull partner (cron)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/pull/locations',body:{limit:5},
-    steps:['cron อ่าน watermark (date_from)','adapter GET partner /ocpi/cpo/2.2.1/locations','upsert → ocpi_partner_locations']},
   'out-trf-push':{title:'Roaming Out · Tariff — partner push tariff เข้ามา',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/push/tariff',bodyFrom:()=>({tariff_id:val('sel-tariff')}),
     steps:['partner ยิง PUT /ocpi/emsp/2.2.1/tariffs/{cc}/{pid}/{id} (token-in)','bff → orch → core-auth verify','orch → roaming: upsert (เจอ key เดิมเขียนทับ)','ตอบ 1000']},
   'out-trf-del':{title:'Roaming Out · Tariff — partner ลบ tariff',card:'EV-1585',dir:'out',method:'DELETE',urlFrom:()=>'/api/demo/push/tariff/'+encodeURIComponent(val('sel-tariff')),
     steps:['partner ยิง DELETE .../tariffs/{cc}/{pid}/{id} (token-in)','orch → roaming: soft-delete (ปั๊ก deleted_at)','ตอบ 1000']},
-  'out-trf-pull':{title:'Roaming Out · Tariff — เรา pull partner (cron)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/pull/tariffs',body:{limit:5},
-    steps:['cron อ่าน watermark (date_from)','adapter GET partner /ocpi/cpo/2.2.1/tariffs','upsert → ocpi_partner_tariffs']},
+  'out-loc-cron':{title:'Roaming Out · Location — รัน cronjob จริง (locations_pull)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:false},
+    steps:['batch ถาม core-auth: partner ที่เป็น sender + มี locations','ถอดรหัส token partner (AES key เดียวกับ orch)','อ่าน watermark จาก roaming แล้ว page ผ่าน adapter','upsert ทุก location → ocpi_partner_*']},
+  'out-loc-cron-dry':{title:'Roaming Out · Location — cronjob dry-run (ไม่เขียน)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:true},
+    steps:['เหมือน cronjob จริงทุกขั้น','ยกเว้นขั้น upsert — นับอย่างเดียว ไม่เขียน DB']},
+  'out-trf-cron':{title:'Roaming Out · Tariff — รัน cronjob จริง (tariffs_pull)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/batch/tariffs_pull',body:{dry_run:false},
+    steps:['batch ถาม core-auth: partner ที่เป็น sender + มี tariffs','ถอดรหัส token partner (AES key เดียวกับ orch)','อ่าน watermark จาก roaming แล้ว page ผ่าน adapter','upsert ทุก tariff → ocpi_partner_tariffs']},
+  'out-trf-cron-dry':{title:'Roaming Out · Tariff — cronjob dry-run (ไม่เขียน)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/batch/tariffs_pull',body:{dry_run:true},
+    steps:['เหมือน cronjob จริงทุกขั้น','ยกเว้นขั้น upsert — นับอย่างเดียว ไม่เขียน DB']},
 };
 
 function badge(el,text,cls){el.textContent=text;el.className='badge '+cls}
@@ -439,12 +447,25 @@ function openModal(f){
 }
 function finishModal(f,j,httpStatus){
   clearTimers();
-  f.steps.forEach((_,i)=>{const li=$('st-'+i);if(li){li.classList.add('on');if(j.ok)li.classList.add('done')}});
   $('m-running').style.display='none';
-  const r=$('m-result');r.className='result show '+(j.ok?'ok':'bad');
-  $('m-rtitle').textContent=j.ok?`✓ สำเร็จ (HTTP ${httpStatus})`:`✗ ไม่สำเร็จ (HTTP ${httpStatus||'—'})`;
-  $('m-rbody').innerHTML=j.ok?'':`<span style="color:var(--red)">${esc(j.error||'')}</span>`;
-  $('m-rjson').textContent=JSON.stringify(j.ok?j.data:(j.detail||j),null,2);
+  // A batch run answers 200 even when the job exits non-zero — its exit code is the real verdict.
+  const batch=j.ok&&j.data&&typeof j.data.exit_code==='number'&&j.data.job;
+  const good=j.ok&&(!batch||j.data.exit_code===0);
+  f.steps.forEach((_,i)=>{const li=$('st-'+i);if(li){li.classList.add('on');if(good)li.classList.add('done')}});
+  const r=$('m-result');r.className='result show '+(good?'ok':'bad');
+  $('m-rtitle').textContent=good?`✓ สำเร็จ (HTTP ${httpStatus})`:`✗ ไม่สำเร็จ (HTTP ${httpStatus||'—'})`;
+  if(batch){
+    const d=j.data,s=d.summary||{};
+    const counts=Object.entries(s).filter(([k])=>!['dryRun','partner_name','country_code','party_id'].includes(k))
+      .map(([k,v])=>`${esc(k)}=<b>${esc(String(v))}</b>`).join(' · ');
+    $('m-rbody').innerHTML=`<div class="mini">${esc(d.job)}${d.dry_run?' (dry-run)':''} · exit ${d.exit_code} · ${d.duration_ms} ms</div>`+
+      (counts?`<div style="margin-top:6px">${counts}</div>`:'')+
+      (d.exit_code!==0?'<div style="color:var(--red);margin-top:6px">job จบด้วย exit ไม่ใช่ 0 — ดู log ด้านล่าง</div>':'');
+    $('m-rjson').textContent=(d.log||[]).join('\n');
+  }else{
+    $('m-rbody').innerHTML=j.ok?'':`<span style="color:var(--red)">${esc(j.error||'')}</span>`;
+    $('m-rjson').textContent=JSON.stringify(j.ok?j.data:(j.detail||j),null,2);
+  }
 }
 function clearTimers(){modalTimers.forEach(clearTimeout);modalTimers=[]}
 function closeModal(){$('modal').classList.remove('show');clearTimers()}
@@ -471,6 +492,16 @@ async function runFlow(key,btn){
   if(tblCur)loadTablePage();
 }
 
+// Cron buttons start the real batch binaries, which only exist when someone ran `make batch-jobs`.
+function setCronButtons(jobs){
+  [['locations_pull','btn-cron-loc','cron-loc-hint'],['tariffs_pull','btn-cron-trf','cron-trf-hint']].forEach(([job,btn,hint])=>{
+    const on=jobs.includes(job),b=$(btn),d=$(btn+'-dry'),h=$(hint);
+    if(!b)return;
+    b.disabled=!on;if(d)d.disabled=!on;
+    if(h)h.textContent=on?'รัน binary ตัวจริงของ batch-ocpi-process (ตัวเดียวกับ k8s CronJob)':'ยังไม่ได้ build — รัน `make batch-jobs` แล้ว restart demo';
+  });
+}
+
 // ---- header state ----
 async function refreshState(){
   try{
@@ -483,6 +514,7 @@ async function refreshState(){
     badge($('b-kafka'),'Kafka: '+(d.kafka.enabled?'พร้อม':'ปิด'),d.kafka.enabled?'on':'warn');
     $('banner').style.display=(d.evolt.configured&&!d.evolt.reachable)?'block':'none';
     if($('btn-kafka')){$('btn-kafka').disabled=!d.kafka.enabled;if(!d.kafka.enabled)$('btn-kafka').title=d.kafka.reason||''}
+    setCronButtons(d.batch_jobs||[]);
     const sel=$('sel-station');
     if(sel.options.length===0&&(d.allowed_stations||[]).length)
       d.allowed_stations.forEach(s=>sel.add(new Option(s.slice(0,8)+'…',s)));
