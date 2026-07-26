@@ -18,6 +18,12 @@ type LogEntry struct {
 	AuthPresent    bool      `json:"auth_present"`
 }
 
+// ClearLog empties the request log without touching own/received data or registrations.
+func (s *Store) ClearLog(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `TRUNCATE request_log`)
+	return err
+}
+
 func (s *Store) AppendLog(ctx context.Context, e LogEntry) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO request_log
 		(direction, method, path, http_status, ocpi_status_code, counterparty, body_excerpt, auth_present)

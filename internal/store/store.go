@@ -85,6 +85,12 @@ var schema = []string{
 		body_excerpt TEXT NOT NULL DEFAULT '',
 		auth_present BOOL NOT NULL DEFAULT false
 	)`,
+	// synced_at = when the mock actually wrote the row (a push/pull landing), distinct from the OCPI
+	// object's own last_updated. Added by ALTER so existing replicas gain it too.
+	`ALTER TABLE received_locations  ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+	`ALTER TABLE received_evses      ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+	`ALTER TABLE received_connectors ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+	`ALTER TABLE received_tariffs    ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
 }
 
 // Open connects with retries so the app survives compose/Neon cold starts.

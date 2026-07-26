@@ -77,11 +77,13 @@ func New(cfg config.Config, st *store.Store, cl *client.Client) *echo.Echo {
 	admin.DELETE("/push/tariff/:tariff_id", h.AdminDeleteTariffPush)
 	admin.POST("/pull/:kind", h.AdminPullCounterparty)
 	admin.GET("/registrations", h.AdminRegistrations)
+	admin.DELETE("/registrations", h.AdminUnregister)
 	admin.GET("/state", h.AdminState)
 	admin.GET("/own/:kind", h.AdminOwn)
 	admin.GET("/received/:kind", h.AdminReceived)
 	admin.POST("/received/locations", h.AdminInjectLocation)
 	admin.GET("/requests", h.AdminRequests)
+	admin.DELETE("/requests", h.AdminClearRequests)
 	admin.POST("/seed/reset", h.AdminSeedReset)
 
 	return e

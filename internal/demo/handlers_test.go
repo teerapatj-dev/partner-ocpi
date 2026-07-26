@@ -95,11 +95,12 @@ func newHandlers(t *testing.T, cfg Config, mockSrv, evoltSrv *httptest.Server) *
 		cfg.EvoltOrchURL = evoltSrv.URL
 		cfg.EvoltAdapterURL = evoltSrv.URL
 		cfg.EvoltRoamingURL = evoltSrv.URL
+		cfg.EvoltCoreAuthURL = evoltSrv.URL
 		if cfg.EvoltVersionsURL == "" {
 			cfg.EvoltVersionsURL = evoltSrv.URL + "/api/ocpi/versions"
 		}
 	}
-	return NewHandlers(cfg, NewMockAdmin(cfg), NewEvolt(cfg), NewKafka(Config{}))
+	return NewHandlers(cfg, NewMockAdmin(cfg), NewEvolt(cfg), NewKafka(Config{}), nil, nil)
 }
 
 const stateBody = `{"partner":{"name":"PlugSiam","party_id":"PLG","country_code":"TH"},"registration_status":"REGISTERED","counts":{"own_locations":4}}`
@@ -318,7 +319,8 @@ func TestEvoltPullHappy(t *testing.T) {
 			return
 		}
 		pullReq = mustDecode(r)
-		w.Write([]byte(`{"status_code":1000,"data":{"http_status":200,"body":[],"next_url":""}}`))
+		// Real adapter contract: success is the bare pull response, no envelope.
+		w.Write([]byte(`{"http_status":200,"total_count":3,"body":{"data":[]},"next_url":""}`))
 	}))
 	mock := fakeMock(t, map[string]http.HandlerFunc{
 		"GET /admin/tokens/current": jsonResp(`{"status":"REGISTERED","token_inbound":"secret-inbound","token_outbound":"c"}`),
@@ -340,6 +342,9 @@ func TestEvoltPullHappy(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "secret-inbound") {
 		t.Fatal("inbound token leaked to the browser response")
+	}
+	if !strings.Contains(rec.Body.String(), `"total_count":3`) {
+		t.Fatalf("adapter payload not passed through: %s", rec.Body.String())
 	}
 }
 
@@ -572,5 +577,191 @@ func TestOcpiProxyRejectsDotSegments(t *testing.T) {
 	}
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestUnregister(t *testing.T) {
+	deleted, reset := false, false
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"DELETE /admin/registrations": func(w http.ResponseWriter, _ *http.Request) {
+			deleted = true
+			w.Write([]byte(`{"deleted":1}`))
+		},
+		"POST /admin/seed/reset": func(w http.ResponseWriter, _ *http.Request) {
+			reset = true
+			w.Write([]byte(`{"reset":true,"seeded_objects":7}`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+	rec := doReq(t, h.Unregister, http.MethodPost, "/api/demo/unregister", "")
+	got := decode(t, rec)
+	// Unregister must both drop the registration AND wipe the partner data for a clean next run.
+	if rec.Code != http.StatusOK || !got.ok || !deleted || !reset {
+		t.Fatalf("unregister failed: %d deleted=%v reset=%v %s", rec.Code, deleted, reset, rec.Body.String())
+	}
+
+	down := newHandlers(t, Config{}, nil, nil)
+	rec = doReq(t, down.Unregister, http.MethodPost, "/", "")
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("mock down must 502, got %d", rec.Code)
+	}
+}
+
+func TestClearRequests(t *testing.T) {
+	called := false
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"DELETE /admin/requests": func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.Write([]byte(`{"cleared":true}`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+	rec := doReq(t, h.ClearRequests, http.MethodPost, "/api/demo/requests/clear", "")
+	got := decode(t, rec)
+	if rec.Code != http.StatusOK || !got.ok || !called {
+		t.Fatalf("clear requests failed: %d called=%v %s", rec.Code, called, rec.Body.String())
+	}
+}
+
+// partnersBody is core-auth's real answer shape. It carries the encrypted outbound token, which the
+// mirror must never pass on to the browser.
+const partnersBody = `{"code":"1000","message":"ok","data":{"partners":[
+ {"credentials_id":"c-other","country_code":"TH","party_id":"MXX","token_outbound_enc":"AnYxSECRET-OTHER"},
+ {"credentials_id":"c-plg","country_code":"TH","party_id":"PLG","token_outbound_enc":"AnYxSECRET-PLG"}]}}`
+
+// fakeEvoltMirror serves the three reads the mirror makes; roaming legs must carry the API key.
+func fakeEvoltMirror(t *testing.T, roamingKey string, routes map[string]http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/ocpi/partner/") && r.Header.Get("X-API-Key") != roamingKey {
+			t.Errorf("roaming called without the API key: %s", r.URL.Path)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if h, hit := routes[r.URL.Path]; hit {
+			h(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+}
+
+func mirrorData(t *testing.T, rec *httptest.ResponseRecorder) struct {
+	Registered    bool            `json:"registered"`
+	CredentialsID string          `json:"credentials_id"`
+	Locations     json.RawMessage `json:"locations"`
+	Tariffs       json.RawMessage `json:"tariffs"`
+	Tariff        json.RawMessage `json:"tariff"`
+	Notes         []string        `json:"notes"`
+} {
+	t.Helper()
+	got := decode(t, rec)
+	if rec.Code != http.StatusOK || !got.ok {
+		t.Fatalf("mirror failed: %d %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Registered    bool            `json:"registered"`
+		CredentialsID string          `json:"credentials_id"`
+		Locations     json.RawMessage `json:"locations"`
+		Tariffs       json.RawMessage `json:"tariffs"`
+		Tariff        json.RawMessage `json:"tariff"`
+		Notes         []string        `json:"notes"`
+	}
+	if err := json.Unmarshal(got.data, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestEvoltMirrorHappy(t *testing.T) {
+	mock := fakeMock(t, map[string]http.HandlerFunc{"GET /admin/state": jsonResp(stateBody)})
+	evolt := fakeEvoltMirror(t, "roam-key", map[string]http.HandlerFunc{
+		"/ocpi/credentials/partners":     jsonResp(partnersBody),
+		"/ocpi/partner/locations/latest": jsonResp(`{"code":"1000","data":{"date_from":"2026-07-01T03:00:00Z"}}`),
+		"/ocpi/partner/tariffs/latest":   jsonResp(`{"code":"1000","data":{"date_from":"2026-07-23T09:00:00Z"}}`),
+		"/ocpi/partner/tariffs": func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query()
+			if q.Get("credentials_id") != "c-plg" || q.Get("tariff_id") != "PLG-TAR-AC1" ||
+				q.Get("country_code") != "TH" || q.Get("party_id") != "PLG" {
+				t.Errorf("read-back key wrong: %s", r.URL.RawQuery)
+			}
+			w.Write([]byte(`{"code":"1000","data":{"id":"PLG-TAR-AC1","currency":"THB","elements":[{"price_components":[{"type":"ENERGY","price":6.5,"vat":7}]}]}}`))
+		},
+	})
+	h := newHandlers(t, Config{RoamingAPIKey: "roam-key"}, mock, evolt)
+
+	rec := doReq(t, h.EvoltMirror, http.MethodGet, "/api/demo/evolt/mirror?tariff_id=PLG-TAR-AC1", "")
+	got := mirrorData(t, rec)
+
+	if !got.Registered || got.CredentialsID != "c-plg" {
+		t.Fatalf("wrong partner matched: %+v", got)
+	}
+	if !strings.Contains(string(got.Locations), "2026-07-01T03:00:00Z") ||
+		!strings.Contains(string(got.Tariffs), "2026-07-23T09:00:00Z") {
+		t.Fatalf("watermarks not passed through: %s | %s", got.Locations, got.Tariffs)
+	}
+	if !strings.Contains(string(got.Tariff), `"price":6.5`) {
+		t.Fatalf("read-back price missing: %s", got.Tariff)
+	}
+	if len(got.Notes) != 0 {
+		t.Fatalf("unexpected notes: %v", got.Notes)
+	}
+	if strings.Contains(rec.Body.String(), "SECRET") {
+		t.Fatal("the encrypted partner token reached the browser payload")
+	}
+}
+
+func TestEvoltMirrorTariffNotFoundIsNotAWarning(t *testing.T) {
+	mock := fakeMock(t, map[string]http.HandlerFunc{"GET /admin/state": jsonResp(stateBody)})
+	evolt := fakeEvoltMirror(t, "", map[string]http.HandlerFunc{
+		"/ocpi/credentials/partners":     jsonResp(partnersBody),
+		"/ocpi/partner/locations/latest": jsonResp(`{"code":"1000","data":{"date_from":null}}`),
+		"/ocpi/partner/tariffs/latest":   jsonResp(`{"code":"1000","data":{"date_from":null}}`),
+		// Roaming answers a missing tariff with HTTP 200 and code 2800 — the state before the
+		// first push, not a failure to report.
+		"/ocpi/partner/tariffs": jsonResp(`{"code":"2800","message":"Tariff Not Found"}`),
+	})
+	h := newHandlers(t, Config{}, mock, evolt)
+
+	got := mirrorData(t, doReq(t, h.EvoltMirror, http.MethodGet, "/?tariff_id=PLG-TAR-AC1", ""))
+	if len(got.Tariff) != 0 {
+		t.Fatalf("tariff must be absent: %s", got.Tariff)
+	}
+	if len(got.Notes) != 0 {
+		t.Fatalf("not-found must not raise a warning: %v", got.Notes)
+	}
+}
+
+func TestEvoltMirrorPartialWhenOneModuleFails(t *testing.T) {
+	mock := fakeMock(t, map[string]http.HandlerFunc{"GET /admin/state": jsonResp(stateBody)})
+	evolt := fakeEvoltMirror(t, "", map[string]http.HandlerFunc{
+		"/ocpi/credentials/partners":     jsonResp(partnersBody),
+		"/ocpi/partner/locations/latest": jsonResp(`{"code":"1000","data":{"date_from":"2026-07-01T03:00:00Z"}}`),
+		"/ocpi/partner/tariffs/latest": func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"code":"9999","message":"boom"}`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, evolt)
+
+	got := mirrorData(t, doReq(t, h.EvoltMirror, http.MethodGet, "/", ""))
+	if !strings.Contains(string(got.Locations), "2026-07-01") {
+		t.Fatalf("a failing module must not drop the one that worked: %s", got.Locations)
+	}
+	if len(got.Notes) != 1 || !strings.Contains(got.Notes[0], "tariffs") {
+		t.Fatalf("expected one note about tariffs, got %v", got.Notes)
+	}
+}
+
+func TestEvoltMirrorUnregisteredParty(t *testing.T) {
+	mock := fakeMock(t, map[string]http.HandlerFunc{"GET /admin/state": jsonResp(stateBody)})
+	evolt := fakeEvoltMirror(t, "", map[string]http.HandlerFunc{
+		"/ocpi/credentials/partners": jsonResp(`{"code":"1000","data":{"partners":[]}}`),
+	})
+	h := newHandlers(t, Config{}, mock, evolt)
+
+	got := mirrorData(t, doReq(t, h.EvoltMirror, http.MethodGet, "/", ""))
+	if got.Registered || len(got.Notes) != 0 {
+		t.Fatalf("an unknown party is a state, not an error: %+v", got)
 	}
 }

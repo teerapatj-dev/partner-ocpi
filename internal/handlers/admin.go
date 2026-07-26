@@ -226,6 +226,17 @@ func (h *Handlers) AdminRegistrations(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+func (h *Handlers) AdminUnregister(c echo.Context) error {
+	deleted, err := h.st.DeleteAllRegistrations(c.Request().Context())
+	if err != nil {
+		return adminErr(c, http.StatusInternalServerError, "delete registrations failed")
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"deleted": deleted,
+		"note":    "partner side only — the counterparty still holds its record",
+	})
+}
+
 func (h *Handlers) AdminState(c echo.Context) error {
 	ctx := c.Request().Context()
 	counts := map[string]int{}
@@ -355,6 +366,14 @@ func (h *Handlers) AdminRequests(c echo.Context) error {
 		return adminErr(c, http.StatusInternalServerError, "list log failed")
 	}
 	return c.JSON(http.StatusOK, entries)
+}
+
+func (h *Handlers) AdminClearRequests(c echo.Context) error {
+	ctx := c.Request().Context()
+	if err := h.st.ClearLog(ctx); err != nil {
+		return adminErr(c, http.StatusInternalServerError, "clear failed")
+	}
+	return c.JSON(http.StatusOK, map[string]any{"cleared": true})
 }
 
 func (h *Handlers) AdminSeedReset(c echo.Context) error {

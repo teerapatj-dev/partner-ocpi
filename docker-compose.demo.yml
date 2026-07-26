@@ -18,6 +18,10 @@ services:
       EVOLT_ORCH_URL: ${EVOLT_ORCH_URL:-}
       EVOLT_ADAPTER_URL: ${EVOLT_ADAPTER_URL:-}
       EVOLT_ROAMING_URL: ${EVOLT_ROAMING_URL:-}
+      EVOLT_COREAUTH_URL: ${EVOLT_COREAUTH_URL:-}
+      EVOLT_DB_DSN: ${EVOLT_DB_DSN:-}
+      # Mock's own Postgres (same DB the plugsiam service uses) — read-only table browser only.
+      PARTNER_DB_DSN: ${PARTNER_DB_DSN:-postgres://mock:mock@postgres:5432/partner_plg?sslmode=disable}
       EVOLT_ORCH_API_KEY: ${EVOLT_ORCH_API_KEY:-}
       EVOLT_ROAMING_API_KEY: ${EVOLT_ROAMING_API_KEY:-}
       DEMO_ALLOWED_STATION_IDS: ${DEMO_ALLOWED_STATION_IDS:-}
@@ -27,15 +31,26 @@ services:
       DEMO_KAFKA_STATION_ID: ${DEMO_KAFKA_STATION_ID:-}
       DEMO_KAFKA_EVSE_UID: ${DEMO_KAFKA_EVSE_UID:-}
       DEMO_KAFKA_EVSE_ID: ${DEMO_KAFKA_EVSE_ID:-}
+      DEMO_KAFKA_OCPI_EVSE_UID: ${DEMO_KAFKA_OCPI_EVSE_UID:-}
+      DEMO_KAFKA_PARTY_CC: ${DEMO_KAFKA_PARTY_CC:-TH}
+      DEMO_KAFKA_PARTY_ID: ${DEMO_KAFKA_PARTY_ID:-EVO}
+      # Evolt's CPO tariffs feed builds every object before paging, so one page
+      # costs ~19s no matter the limit. The chain has to outlast that.
+      DEMO_TIMEOUT_SECONDS: ${DEMO_TIMEOUT_SECONDS:-60}
     ports:
       - "9100:8080"
 
-  # Publishes the demo on the permanent hostname. Create a remotely-managed
-  # tunnel in the Cloudflare Zero Trust dashboard, point its public hostname at
-  # http://demo:8080, and put the token in .env.demo.
+  # Only needed when cloudflared is NOT installed on the host. The dashboard's
+  # install command registers a launchd/systemd service that survives reboots,
+  # which is the better setup — in that case point the tunnel's public hostname
+  # at http://localhost:9100 and leave this profile off. Running both replicas
+  # is what breaks: they share one route, and only one of the two addresses
+  # (localhost:9100 vs demo:8080) resolves per replica.
+  #   docker compose --profile tunnel ... up   → run it here instead
   cloudflared:
+    profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env.demo}
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
     depends_on:
       - demo
     restart: unless-stopped
@@ -56,3 +71,4 @@ services:
   plugsiam:
     environment:
       BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:9101}
+      OUTBOUND_TIMEOUT_SECONDS: ${MOCK_OUTBOUND_TIMEOUT_SECONDS:-45}

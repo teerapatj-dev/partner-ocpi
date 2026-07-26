@@ -31,7 +31,31 @@ func main() {
 	if enabled, reason := kafka.Enabled(); !enabled {
 		log.Warn().Str("reason", reason).Msg("kafka demo disabled")
 	}
-	h := demo.NewHandlers(cfg, demo.NewMockAdmin(cfg), demo.NewEvolt(cfg), kafka)
+
+	var charger *demo.ChargerDB
+	if cfg.EvoltDBDSN != "" && cfg.KafkaEvseID != "" {
+		charger, err = demo.NewChargerDB(ctx, cfg.EvoltDBDSN, cfg.KafkaEvseID)
+		if err != nil {
+			log.Warn().Err(err).Msg("charger simulator off — cannot reach Evolt DB")
+		} else {
+			defer charger.Close()
+			log.Info().Msg("charger simulator on — evse-status will show real values")
+		}
+	}
+
+	var browser *demo.DBBrowser
+	if cfg.EvoltDBDSN != "" || cfg.PartnerDBDSN != "" {
+		browser, err = demo.NewDBBrowser(ctx, cfg.EvoltDBDSN, cfg.PartnerDBDSN, cfg.KafkaStationID)
+		if err != nil {
+			log.Warn().Err(err).Msg("table browser off — cannot reach a configured DB")
+			browser = nil
+		} else {
+			defer browser.Close()
+			log.Info().Msg("table browser on — Tables menu + Evolt seed available")
+		}
+	}
+
+	h := demo.NewHandlers(cfg, demo.NewMockAdmin(cfg), demo.NewEvolt(cfg), kafka, charger, browser)
 	e, err := demo.NewServer(cfg, h)
 	if err != nil {
 		log.Fatal().Err(err).Msg("build server")

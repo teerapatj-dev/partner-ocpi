@@ -71,9 +71,12 @@ curl -s localhost:9101/health
 **เงื่อนไข network:** เครื่องที่รันต้องต่อ VPN ถึง Evolt dev (Evolt internal ยิงจาก cloud ไม่ได้) — คนอื่นเข้าผ่าน Cloudflare named tunnel
 
 **ตั้งครั้งเดียว:**
-1. Cloudflare dashboard → Zero Trust → Networks → Tunnels → **Create tunnel** (Cloudflared) → copy token
-2. ใน tunnel เพิ่ม **Public hostname** เช่น `ocpi-demo.<your-domain>` → service `http://demo:8080`
-3. `cp .env.demo.example .env.demo` แล้วเติม token + URL Evolt (ขอจากทีม) — ไฟล์นี้ถูก gitignore
+1. Cloudflare dashboard → Zero Trust → Networks → Tunnels → **Create tunnel** (Cloudflared)
+2. รันคำสั่ง install ที่หน้านั้นโชว์ → cloudflared ขึ้นเป็น service บนเครื่อง (อยู่รอดข้ามรีบูต)
+3. ใน tunnel เพิ่ม **Public hostname** เช่น `ocpi-demo.<your-domain>` → service **`http://localhost:9100`**
+4. `cp .env.demo.example .env.demo` แล้วเติม URL/key ของ Evolt (ขอจากทีม) — ไฟล์นี้ถูก gitignore
+
+ถ้าไม่อยากติดตั้งบนเครื่อง ใช้ cloudflared ใน compose แทนได้: ใส่ `TUNNEL_TOKEN` ใน `.env.demo`, ตั้ง public hostname เป็น `http://demo:8080` แล้วรันด้วย `--profile tunnel` — **ห้ามรันทั้งสองทางพร้อมกัน** เพราะ route มีชุดเดียวแต่ปลายทางคนละที่
 
 **รัน:** `make demo-up` → เปิด `https://ocpi-demo.<your-domain>` (local: `http://localhost:9100`) · ปิด: `make demo-down` · log: `make demo-logs`
 
