@@ -522,10 +522,14 @@ type DemoEvse struct {
 // PartnerCacheLocation is one partner location as Evolt cached it, with the EVSE statuses under it —
 // the eMSP-side mirror of what the mock shows for the other direction.
 type PartnerCacheLocation struct {
-	LocationID  string             `json:"location_id"`
-	Name        string             `json:"name"`
-	City        string             `json:"city"`
+	LocationID string `json:"location_id"`
+	Name       string `json:"name"`
+	City       string `json:"city"`
+	// LastUpdated is the partner's own timestamp; SyncedAt is when Evolt received it. A PUT that
+	// replays an unchanged object moves only SyncedAt, which is why the panel sorts on it — the
+	// object you just pushed is the one you want to look at, changed or not.
 	LastUpdated string             `json:"last_updated"`
+	SyncedAt    string             `json:"synced_at"`
 	Evses       []PartnerCacheEvse `json:"evses"`
 }
 
@@ -668,12 +672,13 @@ func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, part
 	rows, err := b.evolt.Query(ctx, `
 		SELECT l.location_id, COALESCE(l.name,''), COALESCE(l.city,''),
 		       to_char(l.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),
+		       COALESCE(to_char(l.synced_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),''),
 		       COALESCE(e.evse_uid,''), COALESCE(e.status,''),
 		       COALESCE(to_char(e.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),'')
 		FROM ocpi_partner_locations l
 		LEFT JOIN ocpi_partner_evses e ON e.location_id = l.id
 		WHERE l.country_code = $1 AND l.party_id = $2
-		ORDER BY l.last_updated DESC, l.location_id, e.evse_uid
+		ORDER BY l.synced_at DESC NULLS LAST, l.location_id, e.evse_uid
 		LIMIT $3`, countryCode, partyID, limit*8)
 	if err != nil {
 		return nil, fmt.Errorf("read partner cache: %w", err)
@@ -683,8 +688,8 @@ func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, part
 	out := []PartnerCacheLocation{}
 	byID := map[string]int{}
 	for rows.Next() {
-		var locID, name, city, locUpdated, evseUID, status, evseUpdated string
-		if err := rows.Scan(&locID, &name, &city, &locUpdated, &evseUID, &status, &evseUpdated); err != nil {
+		var locID, name, city, locUpdated, locSynced, evseUID, status, evseUpdated string
+		if err := rows.Scan(&locID, &name, &city, &locUpdated, &locSynced, &evseUID, &status, &evseUpdated); err != nil {
 			return nil, err
 		}
 		idx, seen := byID[locID]
@@ -692,7 +697,7 @@ func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, part
 			if len(out) >= limit {
 				continue
 			}
-			out = append(out, PartnerCacheLocation{LocationID: locID, Name: name, City: city, LastUpdated: locUpdated})
+			out = append(out, PartnerCacheLocation{LocationID: locID, Name: name, City: city, LastUpdated: locUpdated, SyncedAt: locSynced})
 			idx = len(out) - 1
 			byID[locID] = idx
 		}

@@ -279,17 +279,18 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <div class="flowhead">⬆️ PUSH <span class="tagp">partner ยัดเข้ามา</span></div>
         <p class="mini">OCPI มี 3 ระดับวัตถุ — Location / EVSE / Connector · <b>PUT</b> = ส่งทั้งก้อน (สร้างหรือแทนที่) · <b>PATCH</b> = ส่งเฉพาะฟิลด์ที่เปลี่ยน</p>
         <div class="act"><span class="lbl">1️⃣ Location</span>
-          <select id="sel-location"></select>
+          <select id="sel-location" onchange="fillEvses()"></select>
           <button class="out" onclick="runFlow('out-loc-put',this)">PUT ทั้งก้อน</button>
           <button class="out" onclick="runFlow('out-loc-patch',this)">PATCH เปลี่ยนชื่อ</button></div>
         <div class="act"><span class="lbl">2️⃣ EVSE</span>
-          <select id="sel-evse"></select>
-          <button class="out" onclick="runFlow('out-evse-put',this)">PUT ทั้งก้อน</button></div>
+          <select id="sel-evse" onchange="fillConnectors()"></select>
+          <button class="out" onclick="runFlow('out-evse-put',this)">PUT ทั้งก้อน</button>
+          <button class="out" onclick="runFlow('out-evse-patch',this)">PATCH สถานะ</button></div>
         <div class="act"><span class="lbl">3️⃣ Connector</span>
           <select id="sel-connector"></select>
           <button class="out" onclick="runFlow('out-conn-put',this)">PUT ทั้งก้อน</button>
           <button class="out" onclick="runFlow('out-conn-patch',this)">PATCH ลด/คืนกำลังไฟ</button></div>
-        <p class="mini">PATCH EVSE = การเปลี่ยนสถานะด้านล่าง (ที่ CPO ยิงบ่อยที่สุด)</p>
+        <p class="mini">PATCH EVSE ส่งแค่ <span class="mono">status</span> — เหมือนที่สไลด์ด้านล่างยิง (call ที่ CPO ใช้บ่อยที่สุด)</p>
         <div class="charger out" id="chg-out">
           <div class="chgtop"><span class="chgstate" id="chg-out-state">AVAILABLE</span>
             <span class="chgmeter" id="chg-out-meter">พร้อมใช้งาน</span></div>
@@ -300,7 +301,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           </div>
           <ol class="chgsteps" id="chg-out-steps"></ol>
         </div>
-        <p class="mini">partner เป็น CPO ส่ง <span class="mono">OCPI Status</span> ตรงๆ — spec ไม่มี PREPARING/FINISHING · ช่วง "เสียบแล้วยังไม่จ่ายไฟ / ชาร์จจบแต่รถยังจอด" OCPI ใช้ <b>BLOCKED</b> (หัวชาร์จถูกกีดขวางทางกายภาพ)</p>
+        <p class="mini">partner เป็น CPO ส่ง <span class="mono">OCPI Status</span> ตรงๆ — spec ไม่มี PREPARING/FINISHING เลยเป็น AVAILABLE ⇄ CHARGING · สถานะอื่น (BLOCKED/OUTOFORDER) ส่งได้จากช่องด้านล่าง</p>
         <details class="adv"><summary>ส่งสถานะเดี่ยว (เคสขอบ เช่น OUTOFORDER)</summary>
           <div class="act"><span class="lbl">push สถานะ</span>
             <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
@@ -496,6 +497,9 @@ const FLOWS={
   'out-evse-put':{title:'Roaming Out · EVSE — PUT ทั้งก้อน',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
     bodyFrom:()=>({method:'PUT',level:'evse',location_id:val('sel-location'),evse_uid:val('sel-evse')}),
     steps:['partner ส่ง EVSE object เต็ม (พร้อม connectors)','PUT .../locations/{cc}/{party}/{loc}/{evse_uid}','core-ocpi upsert แถว evse + connectors ใต้มัน','ตอบ 1000']},
+  'out-evse-patch':{title:'Roaming Out · EVSE — PATCH เฉพาะสถานะ',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
+    bodyFrom:()=>({method:'PATCH',level:'evse',location_id:val('sel-location'),evse_uid:val('sel-evse'),mutate:{status:val('sel-evse-status')}}),
+    steps:['partner เปลี่ยนสถานะหัวชาร์จในระบบตัวเอง','ยิง PATCH .../{loc}/{evse_uid} (เฉพาะ status + last_updated)','core-ocpi merge ทับเฉพาะฟิลด์นั้น','ตอบ 1000 — ฟิลด์อื่นของ EVSE ไม่ถูกแตะ']},
   'out-conn-put':{title:'Roaming Out · Connector — PUT ทั้งก้อน',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
     bodyFrom:()=>({method:'PUT',level:'connector',location_id:val('sel-location'),evse_uid:val('sel-evse'),connector_id:val('sel-connector')}),
     steps:['partner ส่ง Connector object เต็ม','PUT .../locations/{cc}/{party}/{loc}/{evse_uid}/{conn_id}','core-ocpi upsert แถว connector เดียว','ตอบ 1000']},
@@ -582,10 +586,8 @@ const CHARGERS={
   out:{
     kW:60, endpoint:'/api/demo/push/evse-status',
     body:s=>({evse_uid:val('sel-evse'),status:s}),
-    start:[{s:'BLOCKED',t:'รถจอด+เสียบสาย ยังไม่จ่ายไฟ → BLOCKED'},
-           {s:'CHARGING',t:'เริ่มจ่ายไฟ → CHARGING'}],
-    stop:[{s:'BLOCKED',t:'ชาร์จจบ รถยังจอดคาหัว → BLOCKED'},
-          {s:'AVAILABLE',t:'ถอดสาย+ถอยรถ → AVAILABLE'}]},
+    start:[{s:'CHARGING',t:'partner PATCH → CHARGING'}],
+    stop:[{s:'AVAILABLE',t:'partner PATCH → AVAILABLE'}]},
 };
 const chgState={in:{charging:false,busy:false,timer:null,t0:0},out:{charging:false,busy:false,timer:null,t0:0}};
 
@@ -758,14 +760,11 @@ async function refreshOwn(){
       api('/api/demo/own/tariffs?source=base').then(r=>r.json())]);
     if(locs.ok){
       ownLocs=locs.data||[];
-      const sl=$('sel-location'),se=$('sel-evse'),sc=$('sel-connector');
-      const kl=sl.value,ke=se.value,kc=sc?sc.value:'';
-      sl.innerHTML='';se.innerHTML='';if(sc)sc.innerHTML='';
-      ownLocs.forEach(l=>{sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
-        (l.evses||[]).forEach(e=>{se.add(new Option(`${e.uid} · ${e.status||'—'} (${l.id})`,e.uid));
-          if(sc)(e.connectors||[]).forEach(cn=>sc.add(new Option(
-            `${cn.id} · ${cn.standard||''} ${Math.round((cn.max_electric_power||0)/1000)}kW (${e.uid})`,cn.id)));});});
-      if(kl)sl.value=kl;if(ke)se.value=ke;if(kc&&sc)sc.value=kc;
+      const sl=$('sel-location'),keep=sl.value;
+      sl.innerHTML='';
+      ownLocs.forEach(l=>sl.add(new Option(`${l.id} — ${l.name||''}`,l.id)));
+      if(keep&&ownLocs.some(l=>l.id===keep))sl.value=keep;
+      fillEvses();
     }
     if(trfs.ok){const st=$('sel-tariff'),keep=st.value;st.innerHTML='';(trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));if(keep)st.value=keep;}
   }catch(e){}
@@ -775,9 +774,30 @@ async function refreshOwn(){
    currently holds (loaded with the pickers) rather than a constant that could already be in place. */
 let ownLocs=[];
 function currentLoc(){return ownLocs.find(l=>l.id===val('sel-location'))||null}
-function currentConn(){
+function currentEvse(){
   const l=currentLoc();if(!l)return null;
-  const e=(l.evses||[]).find(x=>x.uid===val('sel-evse'));if(!e)return null;
+  return (l.evses||[]).find(x=>x.uid===val('sel-evse'))||null;
+}
+/* The pickers cascade: a connector is only addressable as location→evse→connector, and ids like "1"
+   repeat across EVSEs, so a flat list let you select one connector and push a different one. */
+function fillEvses(){
+  const se=$('sel-evse');if(!se)return;
+  const l=currentLoc(),keep=se.value;
+  se.innerHTML='';
+  ((l&&l.evses)||[]).forEach(e=>se.add(new Option(`${e.uid} · ${e.status||'—'}`,e.uid)));
+  if(keep&&((l&&l.evses)||[]).some(e=>e.uid===keep))se.value=keep;
+  fillConnectors();
+}
+function fillConnectors(){
+  const sc=$('sel-connector');if(!sc)return;
+  const e=currentEvse(),keep=sc.value;
+  sc.innerHTML='';
+  ((e&&e.connectors)||[]).forEach(cn=>sc.add(new Option(
+    `${cn.id} · ${cn.standard||''} ${Math.round((cn.max_electric_power||0)/1000)}kW`,cn.id)));
+  if(keep&&((e&&e.connectors)||[]).some(c=>c.id===keep))sc.value=keep;
+}
+function currentConn(){
+  const e=currentEvse();if(!e)return null;
   return (e.connectors||[]).find(c=>c.id===val('sel-connector'))||null;
 }
 function nextLocName(){
@@ -1044,11 +1064,12 @@ function partnerCacheCards(){
         return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc(e.uid)}</span></span>`;
       }).join('');
       const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
-      const f=changed('pcl:'+pt.key+':'+l.location_id,when)?' flash':'';
+      const f=changed('pcl:'+pt.key+':'+l.location_id,when+'|'+(l.synced_at||''))?' flash':'';
       body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
         `<span class="when mono">${esc(l.location_id)}</span></div>`+
         `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
-        `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div></div>`);
+        `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div>`+
+        (l.synced_at?`<div class="when">📥 Evolt รับเข้า: ${esc(ago(l.synced_at))} <span class="mono">${esc(thTime(l.synced_at))}</span></div>`:'')+`</div>`);
     });
     out.push(pgroupBody(gid,body.join('')));
   });
