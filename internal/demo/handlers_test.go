@@ -535,6 +535,35 @@ func TestEnsureKafkaBaseline(t *testing.T) {
 			t.Fatalf("payload id = %v", payload["id"])
 		}
 	})
+
+	// The fanout handshake seeds the partner being registered — a write that lands on the main
+	// mock instead left VCT/CHX without a baseline and every status PATCH answered 2003.
+	t.Run("seed lands on the admin asked, not the main mock", func(t *testing.T) {
+		mainHit := false
+		mock := fakeMock(t, map[string]http.HandlerFunc{
+			"POST /admin/received/locations": func(w http.ResponseWriter, _ *http.Request) {
+				mainHit = true
+				w.Write([]byte(`{}`))
+			},
+		})
+		altHit := false
+		alt := fakeMock(t, map[string]http.HandlerFunc{
+			"GET /admin/received/locations": jsonResp(`{"locations":[]}`),
+			"POST /admin/received/locations": func(w http.ResponseWriter, _ *http.Request) {
+				altHit = true
+				w.Write([]byte(`{"stored":"st-1"}`))
+			},
+		})
+		h := newHandlers(t, cfg, mock, nil)
+		admin := NewMockAdminAt(alt.URL, adminKey, h.cfg)
+		seeded, err := h.ensureKafkaBaselineFor(t.Context(), admin)
+		if err != nil || !seeded {
+			t.Fatalf("seeded=%v err=%v", seeded, err)
+		}
+		if mainHit || !altHit {
+			t.Fatalf("mainHit=%v altHit=%v — baseline must be written to the given admin", mainHit, altHit)
+		}
+	})
 }
 
 func TestOcpiProxyRejectsDotSegments(t *testing.T) {

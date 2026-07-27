@@ -701,7 +701,7 @@ func (h *Handlers) ensureKafkaBaselineFor(ctx context.Context, admin *MockAdmin)
 		"evses":        evses,
 		"last_updated": "2020-01-01T00:00:00Z",
 	}
-	if _, err := h.mock.Post(ctx, "/admin/received/locations", map[string]any{
+	if _, err := admin.Post(ctx, "/admin/received/locations", map[string]any{
 		"country_code": h.cfg.KafkaPartyCC,
 		"party_id":     h.cfg.KafkaPartyID,
 		"payload":      baseline,
