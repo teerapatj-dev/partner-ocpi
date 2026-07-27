@@ -115,6 +115,8 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 .kv:last-child{border-bottom:0}.kv span:first-child{color:var(--muted)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
 .empty{color:var(--muted);font-size:12px;padding:16px 10px;text-align:center;border:1px dashed var(--line);border-radius:7px}
+.pgroup{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--accent,#7dd3fc);margin:12px 0 4px;display:flex;gap:6px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:3px}
+.pgroup:first-child{margin-top:0}
 @keyframes flashbg{0%{background:rgba(255,180,84,.55);border-color:var(--amber)}100%{background:var(--bg);border-color:var(--line)}}
 @keyframes flashchip{0%{background:rgba(255,180,84,.65)}100%{background:transparent}}
 .item.flash{animation:flashbg 2.2s ease-out}.chip.flash{animation:flashchip 2.2s ease-out}
@@ -253,7 +255,8 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <p class="mini">เราเป็น CPO · ผลไปแผงขวา (DB PlugSiam)</p>
         <div class="flowhead">⬇️ PULL <span class="tagp">partner ดึงจากเรา</span></div>
         <div class="act"><span class="lbl">ดึง locations</span>
-          <button class="in" onclick="runFlow('in-loc-pull',this)">GET 5 รายการ · ทุก partner</button></div>
+          <button class="in" onclick="runFlow('in-loc-pull',this)">GET 5 รายการ · ทุก partner</button>
+          <button class="in" onclick="runFlow('in-loc-pull-all',this)">⬇ ดึงทั้งหมด (initial sync)</button></div>
         <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner</span></div>
         <div class="act"><span class="lbl">เลือกตู้ (evse)</span>
           <select id="sel-push-evse" title="EVSE ของสถานี demo"></select></div>
@@ -466,9 +469,9 @@ const FLOWS={
   'evolt-seed':{title:'Initialize Evolt — seed ตัวตน OCPI (3 ตาราง)',card:'setup',dir:'setup',method:'POST',url:'/api/demo/evolt/seed',
     steps:['เขียน ocpi_credentials (is_self, TH/EVT)','เขียน ocpi_credentials_roles (CPO+EMSP)','เขียน ocpi_endpoints (7 endpoint → bff /api/ocpi)','idempotent — มีอยู่แล้วข้าม (insert 0)']},
   'evolt-init':{title:'Handshake — ให้ Evolt เริ่ม',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/evolt-init',
-    steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง','initial sync: partner ดึง locations จริงทุกหน้า (GET จริง ดูใน Log)']},
+    steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง']},
   'partner-init':{title:'Handshake — Partner เริ่ม (PlugSiam → Evolt)',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/partner-init',
-    steps:['mock ขอ Token A จาก orch','mock GET Evolt /versions','mock GET version details /2.2.1','mock POST /credentials → Evolt (แลก Token C)','Evolt callback ← mock /versions','ทะเบียน REGISTERED สองฝั่ง','initial sync: partner ดึง locations จริงทุกหน้า (GET จริง ดูใน Log)']},
+    steps:['mock ขอ Token A จาก orch','mock GET Evolt /versions','mock GET version details /2.2.1','mock POST /credentials → Evolt (แลก Token C)','Evolt callback ← mock /versions','ทะเบียน REGISTERED สองฝั่ง']},
   'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB — ทุก partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
     steps:['ลบ registration ใน mock DB (PLG · VCT · CHX)','เคลียร์ received_* + request log ทุกเจ้า','seed own catalog ใหม่ (เริ่มสะอาด)','ลบ row ฝั่ง Evolt ของทุก party (ไม่มี DELETE /credentials ใน spec)']},
 
@@ -478,6 +481,8 @@ const FLOWS={
     steps:['จำลองตู้ online + set ocpp_status ที่เลือก (DB)','produce Kafka event evse_status','roaming consumer → fanout','PATCH /ocpi/emsp/2.2.1/locations/{cc}/{pid}/{loc}/{evse} → partner','partner ตอบ 1000']},
   'evolt-tariff-backfill':{title:'Roaming In · Tariff — Backfill (seed evolt_ocpi_tariff)',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/evolt/tariff-backfill',
     steps:['core-ocpi-roaming /internal/tariffs/backfill','วน materialize ทุก station ที่ expose ได้ (seed-only, ไม่ push)','เขียน evolt_ocpi_tariff + location_map_tariff_ocpi','คืน summary: stations/objects/map rows']},
+  'in-loc-pull-all':{title:'Roaming In · Location — initial sync (ทุก partner ดึงทั้ง catalog)',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/pull/locations',body:{all:true},
+    steps:['ทุก partner ที่ REGISTERED ไล่ GET /ocpi/cpo/2.2.1/locations ทีละหน้า (limit 20)','เดินหน้าไปเรื่อยจนครบ X-Total-Count','cache ทุก location/evse/connector ลง received_*','จากนี้ status event = PATCH ของจริง']},
   'in-trf-pull':{title:'Roaming In · Tariff — partner ทุกเจ้าดึง tariffs ของเรา',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/pull/tariffs',body:{limit:5},
     steps:['ทุก partner ที่ REGISTERED ยิง GET /ocpi/cpo/2.2.1/tariffs พร้อมกัน (token ของใครของมัน)','orch → core-auth verify token','core-ocpi-roaming อ่าน tariff BASE/ALT สด + แปลง OCPI','envelope + X-Total-Count / Link → partner']},
   'in-trf-push':{title:'Roaming In · Tariff — เรา push tariff (fanout)',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/evolt/tariff-push',bodyFrom:()=>({station_id:val('sel-station')}),
@@ -793,45 +798,61 @@ function inboundBanner(){
 }
 
 // ---- IN result panes (partner received_*) ----
+function pgroupHead(pt){
+  return `<div class="pgroup">🟩 ${esc(pt.name||pt.key)} <span class="mono" style="font-weight:400">${esc(pt.key)}</span></div>`;
+}
 async function refreshPartnerData(){
   try{
     const [locs,trfs]=await Promise.all([
       api('/api/demo/received/locations').then(r=>r.json()),
       api('/api/demo/received/tariffs').then(r=>r.json())]);
-    // locations -> res-loc-in
+    // locations -> res-loc-in : one section per partner
     const lh=[];if(lastInbound)lh.push(inboundBanner());
-    const evsesByLoc={};
-    ((locs.data||{}).evses||[]).forEach(e=>{const loc=(e.key||'').split('/')[0];(evsesByLoc[loc]=evsesByLoc[loc]||[]).push(e)});
-    const locations=(locs.data||{}).locations||[];
-    if(!locations.length)lh.push('<div class="empty">ยังไม่มีตู้ของ Evolt ที่นี่<br>กด Roaming In (ดึง / ยิง event)</div>');
-    locations.forEach(l=>{
-      const p=asObj(l.payload);
-      const chips=(evsesByLoc[l.key]||[]).map(e=>{
-        const st=e.status||'UNKNOWN',f=changed('evse:'+e.key,st+'|'+e.last_updated)?' flash':'';
-        return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc((e.key||'').split('/')[1]||'')}</span></span>`;
-      }).join('');
-      const evseWhen=(evsesByLoc[l.key]||[]).map(e=>e.last_updated).sort().pop();
-      const f=changed('loc:'+l.key,l.last_updated+evseWhen)?' flash':'';
-      lh.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
-        `<span class="when">${esc(l.country_code+'/'+l.party_id)} · <button class="ghost" onclick='showJSON("received location",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
-        `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
-        `<div class="when" style="margin-top:6px">อัปเดต: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
+    ((locs.data||{}).partners||[]).forEach(pt=>{
+      lh.push(pgroupHead(pt));
+      if(pt.error){lh.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+      const d=pt.data||{};
+      const evsesByLoc={};
+      (d.evses||[]).forEach(e=>{const loc=(e.key||'').split('/')[0];(evsesByLoc[loc]=evsesByLoc[loc]||[]).push(e)});
+      const locations=d.locations||[];
+      if(!locations.length){lh.push('<div class="empty">ยังไม่มีตู้ของ Evolt ที่นี่ — ทำ Roaming Location (ดึง) ก่อน</div>');return}
+      locations.forEach(l=>{
+        const p=asObj(l.payload);
+        const chips=(evsesByLoc[l.key]||[]).map(e=>{
+          const st=e.status||'UNKNOWN',f=changed('evse:'+pt.key+':'+e.key,st+'|'+e.last_updated)?' flash':'';
+          return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc((e.key||'').split('/')[1]||'')}</span></span>`;
+        }).join('');
+        const evseWhen=(evsesByLoc[l.key]||[]).map(e=>e.last_updated).sort().pop();
+        const f=changed('loc:'+pt.key+':'+l.key,l.last_updated+evseWhen)?' flash':'';
+        lh.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
+          `<span class="when">${esc(l.country_code+'/'+l.party_id)} · <button class="ghost" onclick='showJSON("received location",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
+          `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
+          `<div class="when" style="margin-top:6px">อัปเดต: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
+      });
     });
+    if(!lh.length)lh.push('<div class="empty">ยังไม่มีข้อมูล</div>');
     $('res-loc-in').innerHTML=lh.join('');
-    // tariffs -> res-trf-in
-    const th=[];const tariffs=(trfs.data||{}).tariffs||[];const origins=(trfs.data||{}).origins||{};
-    if(!tariffs.length)th.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (สั่ง push)</div>');
-    tariffs.forEach(t=>{
-      const p=asObj(t.payload),f=changed('rtrf:'+t.key,JSON.stringify(p.elements||[])+t.last_updated)?' flash':'';
-      const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
-      const o=origins[t.key];
-      const origin=o?`<div class="when">🏢 ${esc(o.station_name||o.station_id)} · scope <b>${esc(o.scope)}</b></div>`:'';
-      th.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
-        `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
-        origin+
-        priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
-        `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
+    // tariffs -> res-trf-in : one section per partner
+    const th=[];
+    ((trfs.data||{}).partners||[]).forEach(pt=>{
+      th.push(pgroupHead(pt));
+      if(pt.error){th.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+      const d=pt.data||{};
+      const tariffs=d.tariffs||[];const origins=d.origins||{};
+      if(!tariffs.length){th.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (push/ดึง)</div>');return}
+      tariffs.forEach(t=>{
+        const p=asObj(t.payload),f=changed('rtrf:'+pt.key+':'+t.key,JSON.stringify(p.elements||[])+t.last_updated)?' flash':'';
+        const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
+        const o=origins[t.key];
+        const origin=o?`<div class="when">🏢 ${esc(o.station_name||o.station_id)} · scope <b>${esc(o.scope)}</b></div>`:'';
+        th.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
+          `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
+          origin+
+          priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+          `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
+      });
     });
+    if(!th.length)th.push('<div class="empty">ยังไม่มีข้อมูล</div>');
     $('res-trf-in').innerHTML=th.join('');
   }catch(e){}
 }
@@ -876,46 +897,61 @@ async function refreshMirror(){
 
 /* Evolt's partner cache, rendered like the mock's side so the two directions read the same. Kept in
    a module-level cache: it polls on its own clock, the mirror redraws on its own. */
-let partnerCache=[],partnerCacheTrf=[];
+let partnerCacheParts=[];
 async function refreshPartnerCache(){
   try{
     const r=await api('/api/demo/evolt/partner-cache');const j=await r.json();
     if(!j.ok)return;
-    partnerCache=(j.data||{}).locations||[];
-    partnerCacheTrf=(j.data||{}).tariffs||[];
+    partnerCacheParts=(j.data||{}).partners||[];
     if($('res-loc-out')&&!$('location-out').classList.contains('hidden'))refreshMirror();
     if($('res-trf-out')&&!$('tariff-out').classList.contains('hidden'))refreshMirror();
   }catch(e){}
 }
 function partnerTariffCards(){
-  if(!partnerCacheTrf.length)return ['<div class="empty">Evolt ยังไม่มีราคาของ partner<br>กด PUT (upsert) หรือ tariffs_pull</div>'];
-  return partnerCacheTrf.map(t=>{
-    const p=asObj(t.raw);
-    const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
-    const f=changed('pct:'+t.tariff_id,t.synced_at+(t.deleted_at||''))?' flash':'';
-    const del=t.deleted_at?`<span class="chip st-REMOVED"><b>ลบแล้ว</b><span class="uid">${esc(t.deleted_at)}</span></span>`:'';
-    return `<div class="item${f}"><div class="top"><span class="name">${esc(alt||t.tariff_id)}</span>`+
-      `<span class="when"><button class="ghost" onclick='showJSON("evolt cached partner tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
-      (del?`<div class="chips">${del}</div>`:'')+
-      priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
-      `<div class="when" style="margin-top:6px">รับเข้า: ${esc(ago(t.synced_at))} <span class="mono">${esc(thTime(t.synced_at))}</span></div>`+
-      `<div class="when mono">${esc(t.tariff_id)}</div></div>`;
+  const out=[];
+  partnerCacheParts.forEach(pt=>{
+    out.push(pgroupHead(pt));
+    if(pt.error){out.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+    const rows=pt.tariffs||[];
+    if(!rows.length){out.push('<div class="empty">Evolt ยังไม่มีราคาของ '+esc(pt.name||pt.key)+'<br>กด PUT (upsert) หรือ tariffs_pull</div>');return}
+    rows.forEach(t=>{
+      const p=asObj(t.raw);
+      const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
+      const f=changed('pct:'+pt.key+':'+t.tariff_id,t.synced_at+(t.deleted_at||''))?' flash':'';
+      const del=t.deleted_at?`<span class="chip st-REMOVED"><b>ลบแล้ว</b><span class="uid">${esc(t.deleted_at)}</span></span>`:'';
+      out.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||t.tariff_id)}</span>`+
+        `<span class="when"><button class="ghost" onclick='showJSON("evolt cached partner tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
+        (del?`<div class="chips">${del}</div>`:'')+
+        priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+        `<div class="when" style="margin-top:6px">รับเข้า: ${esc(ago(t.synced_at))} <span class="mono">${esc(thTime(t.synced_at))}</span></div>`+
+        `<div class="when mono">${esc(t.tariff_id)}</div></div>`);
+    });
   });
+  if(!out.length)out.push('<div class="empty">Evolt ยังไม่มีราคาของ partner<br>กด PUT (upsert) หรือ tariffs_pull</div>');
+  return out;
 }
 function partnerCacheCards(){
-  if(!partnerCache.length)return ['<div class="empty">Evolt ยังไม่มีตู้ของ partner<br>กด PUT / PATCH หรือ locations_pull</div>'];
-  return partnerCache.map(l=>{
-    const chips=(l.evses||[]).map(e=>{
-      const st=e.status||'UNKNOWN',f=changed('pc:'+l.location_id+'/'+e.uid,st+'|'+e.last_updated)?' flash':'';
-      return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc(e.uid)}</span></span>`;
-    }).join('');
-    const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
-    const f=changed('pcl:'+l.location_id,when)?' flash':'';
-    return `<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
-      `<span class="when mono">${esc(l.location_id)}</span></div>`+
-      `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
-      `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div></div>`;
+  const out=[];
+  partnerCacheParts.forEach(pt=>{
+    out.push(pgroupHead(pt));
+    if(pt.error){out.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+    const rows=pt.locations||[];
+    if(!rows.length){out.push('<div class="empty">Evolt ยังไม่มีตู้ของ '+esc(pt.name||pt.key)+'<br>กด PUT / PATCH หรือ locations_pull</div>');return}
+    rows.forEach(l=>{
+      const chips=(l.evses||[]).map(e=>{
+        const st=e.status||'UNKNOWN',f=changed('pc:'+pt.key+':'+l.location_id+'/'+e.uid,st+'|'+e.last_updated)?' flash':'';
+        return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc(e.uid)}</span></span>`;
+      }).join('');
+      const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
+      const f=changed('pcl:'+pt.key+':'+l.location_id,when)?' flash':'';
+      out.push(`<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
+        `<span class="when mono">${esc(l.location_id)}</span></div>`+
+        `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
+        `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div></div>`);
+    });
   });
+  if(!out.length)out.push('<div class="empty">Evolt ยังไม่มีตู้ของ partner<br>กด PUT / PATCH หรือ locations_pull</div>');
+  return out;
 }
 
 // ---- fanout partners ----

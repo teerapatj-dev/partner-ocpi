@@ -134,19 +134,7 @@ func (h *Handlers) PartnerInitHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	h.initialSync(ctx, h.mock, "PLG")
 	return ok(c, json.RawMessage(result))
-}
-
-// initialSync makes the freshly registered partner pull Evolt's whole locations catalog — what a
-// real eMSP does the moment registration completes. Every page is a genuine OCPI GET (visible in
-// the log), so a later status event is what it claims to be: a PATCH to real data the partner
-// already holds. Best-effort: the handshake has succeeded, and the status push reports a missing
-// location clearly on its own.
-func (h *Handlers) initialSync(ctx context.Context, admin *MockAdmin, label string) {
-	if _, err := admin.Post(ctx, "/admin/pull/locations", map[string]any{"limit": 20, "all": true}); err != nil {
-		log.Warn().Err(err).Str("partner", label).Msg("initial locations sync after handshake failed")
-	}
 }
 
 // EvoltInitHandshake is the opposite direction: the mock issues Token A and
@@ -174,7 +162,6 @@ func (h *Handlers) EvoltInitHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	h.initialSync(ctx, h.mock, "PLG")
 	return ok(c, json.RawMessage(result))
 }
 
@@ -385,31 +372,29 @@ func (h *Handlers) DeleteTariffPush(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
-func bindLimit(c echo.Context, def, max int) (int, error) {
-	var req struct {
-		Limit *int `json:"limit"`
-	}
-	if err := c.Bind(&req); err != nil {
-		return 0, fmt.Errorf("invalid body")
-	}
-	if req.Limit == nil {
-		return def, nil
-	}
-	if *req.Limit < 1 || *req.Limit > max {
-		return 0, fmt.Errorf("limit must be 1..%d", max)
-	}
-	return *req.Limit, nil
-}
-
 // PartnerPull: the mock pulls a page of Evolt's CPO list with its own Token C.
 func (h *Handlers) PartnerPull(c echo.Context) error {
 	kind := c.Param("kind")
 	if kind != "locations" && kind != "tariffs" {
 		return fail(c, http.StatusBadRequest, "kind must be locations or tariffs", nil)
 	}
-	limit, err := bindLimit(c, 5, 20)
-	if err != nil {
-		return fail(c, http.StatusBadRequest, err.Error(), nil)
+	var req struct {
+		Limit *int `json:"limit"`
+		// All = the roaming initial sync: walk the whole feed page by page instead of one page.
+		All bool `json:"all"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return fail(c, http.StatusBadRequest, "invalid body", nil)
+	}
+	limit := 5
+	if req.All {
+		limit = 20 // page size for the full walk
+	}
+	if req.Limit != nil {
+		if *req.Limit < 1 || *req.Limit > 20 {
+			return fail(c, http.StatusBadRequest, "limit must be 1..20", nil)
+		}
+		limit = *req.Limit
 	}
 
 	// Every partner pulls, not just PLG — the point is one CPO feed serving several eMSPs at
@@ -436,7 +421,7 @@ func (h *Handlers) PartnerPull(c echo.Context) error {
 		wg.Add(1)
 		go func(i int, tg pullTarget) {
 			defer wg.Done()
-			raw, err := tg.admin.Post(ctx, "/admin/pull/"+kind, map[string]int{"limit": limit})
+			raw, err := tg.admin.Post(ctx, "/admin/pull/"+kind, map[string]any{"limit": limit, "all": req.All})
 			if err != nil {
 				results[i] = pullResult{Partner: tg.key, Error: describeErr(err)}
 				return
@@ -554,7 +539,7 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		}
 		if _, inPartner := held[target.OCPIUID]; !inPartner {
 			return fail(c, http.StatusConflict,
-				"partner ยังไม่มีตู้ "+target.OCPIUID+" — กด Handshake ใหม่ (partner จะ initial sync ดึง locations จริงตอนจบ)", nil)
+				"ยังไม่มี partner ไหนถือตู้ "+target.OCPIUID+" — ทำ Roaming Location ก่อน (ปุ่ม ดึงทั้งหมด ในแท็บ Location)", nil)
 		}
 		if _, err := h.db.SimulateEvseOnline(ctx, target.ID, req.Status); err != nil {
 			return fail(c, http.StatusBadGateway, "charger simulate failed: "+err.Error(), nil)
@@ -573,7 +558,7 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 	// picked status instead of UNKNOWN; without the simulator the event still fires with the DB's value.
 	if _, inPartner := held[h.cfg.KafkaOCPIEvseUID]; !inPartner {
 		return fail(c, http.StatusConflict,
-			"partner ยังไม่มีตู้ "+h.cfg.KafkaOCPIEvseUID+" — กด Handshake ใหม่ (partner จะ initial sync ดึง locations จริงตอนจบ)", nil)
+			"ยังไม่มี partner ไหนถือตู้ "+h.cfg.KafkaOCPIEvseUID+" — ทำ Roaming Location ก่อน (ปุ่ม ดึงทั้งหมด ในแท็บ Location)", nil)
 	}
 	simulated := false
 	if h.charger != nil {
@@ -636,52 +621,92 @@ func (h *Handlers) StationEvses(c echo.Context) error {
 
 // PartnerCache answers what Evolt currently holds for this partner — locations with their EVSE
 // statuses, the eMSP-side counterpart of the panel the mock fills for Roaming In.
+// PartnerCache answers what Evolt's Roaming-Out cache holds, one section per partner party — the
+// board is multi-partner, so "what Evolt stored" is only honest when every party shows.
 func (h *Handlers) PartnerCache(c echo.Context) error {
 	if h.db == nil {
 		return fail(c, http.StatusBadRequest, "EVOLT_DB_DSN not configured", nil)
 	}
 	ctx := c.Request().Context()
-	countryCode, partyID, err := h.partnerParty(ctx)
-	if err != nil {
-		return failFrom(c, err)
+	type target struct {
+		key   string
+		admin *MockAdmin
 	}
-	locations, err := h.db.PartnerCacheLocations(ctx, countryCode, partyID, 25)
-	if err != nil {
-		return fail(c, http.StatusBadGateway, err.Error(), nil)
+	targets := []target{{key: "PLG", admin: h.mock}}
+	for _, p := range h.fanout {
+		targets = append(targets, target{key: strings.ToUpper(p.Key), admin: p.admin})
 	}
-	tariffs, err := h.db.PartnerCacheTariffs(ctx, countryCode, partyID, 25)
-	if err != nil {
-		return fail(c, http.StatusBadGateway, err.Error(), nil)
+	partners := make([]map[string]any, 0, len(targets))
+	for _, tg := range targets {
+		entry := map[string]any{"key": tg.key}
+		countryCode, partyID, err := partnerPartyOf(ctx, tg.admin)
+		if err != nil {
+			entry["error"] = describeErr(err)
+			partners = append(partners, entry)
+			continue
+		}
+		if name, err := partnerNameOf(ctx, tg.admin); err == nil {
+			entry["name"] = name
+		}
+		entry["country_code"], entry["party_id"] = countryCode, partyID
+		locations, err := h.db.PartnerCacheLocations(ctx, countryCode, partyID, 25)
+		if err != nil {
+			entry["error"] = err.Error()
+			partners = append(partners, entry)
+			continue
+		}
+		tariffs, err := h.db.PartnerCacheTariffs(ctx, countryCode, partyID, 25)
+		if err != nil {
+			entry["error"] = err.Error()
+			partners = append(partners, entry)
+			continue
+		}
+		entry["locations"], entry["tariffs"] = locations, tariffs
+		partners = append(partners, entry)
 	}
-	return ok(c, map[string]any{
-		"country_code": countryCode, "party_id": partyID,
-		"locations": locations, "tariffs": tariffs,
-	})
+	return ok(c, map[string]any{"partners": partners})
 }
 
-// partnerEvseStatuses maps the partner's received EVSE uid to the status it currently holds.
-// lean=1: after a full initial sync the payloads of the whole estate blow past the admin client's
-// 1 MiB cap, and only key+status matter here.
+// partnerEvseStatuses maps EVSE uid → the status held across every partner (union — a status push
+// lands wherever the EVSE is held, so "someone holds it" is the question; PLG's view wins when
+// several do). lean=1: after a full sync the payloads of the whole estate blow past the admin
+// client's 1 MiB cap, and only key+status matter here.
 func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, error) {
-	raw, err := h.mock.Get(ctx, "/admin/received/locations?lean=1")
-	if err != nil {
-		return nil, err
+	admins := []*MockAdmin{h.mock}
+	for _, p := range h.fanout {
+		admins = append(admins, p.admin)
 	}
-	// ReceivedRow serializes "<location>/<evse_uid>" as "key" (store/received.go).
-	var received struct {
-		Evses []struct {
-			Key    string `json:"key"`
-			Status string `json:"status"`
-		} `json:"evses"`
-	}
-	if err := json.Unmarshal(raw, &received); err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, len(received.Evses))
-	for _, e := range received.Evses {
-		if i := strings.LastIndex(e.Key, "/"); i >= 0 {
-			out[e.Key[i+1:]] = e.Status
+	out := map[string]string{}
+	var lastErr error
+	reached := 0
+	for _, admin := range admins {
+		raw, err := admin.Get(ctx, "/admin/received/locations?lean=1")
+		if err != nil {
+			lastErr = err
+			continue
 		}
+		reached++
+		// ReceivedRow serializes "<location>/<evse_uid>" as "key" (store/received.go).
+		var received struct {
+			Evses []struct {
+				Key    string `json:"key"`
+				Status string `json:"status"`
+			} `json:"evses"`
+		}
+		if err := json.Unmarshal(raw, &received); err != nil {
+			lastErr = err
+			continue
+		}
+		for _, e := range received.Evses {
+			if i := strings.LastIndex(e.Key, "/"); i >= 0 {
+				if _, held := out[e.Key[i+1:]]; !held {
+					out[e.Key[i+1:]] = e.Status
+				}
+			}
+		}
+	}
+	if reached == 0 && lastErr != nil {
+		return nil, lastErr
 	}
 	return out, nil
 }
@@ -765,26 +790,49 @@ func (h *Handlers) Own(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
+// Received aggregates what every partner holds from Evolt, one section per partner, so the panel
+// shows the whole roaming estate — not just PLG's copy.
 func (h *Handlers) Received(c echo.Context) error {
 	kind := c.Param("kind")
 	if kind != "locations" && kind != "tariffs" {
 		return fail(c, http.StatusBadRequest, "kind must be locations or tariffs", nil)
 	}
 	ctx := c.Request().Context()
-	// limit: the panel shows the newest slice; a fully synced catalog with payloads would blow
-	// past the admin client's 1 MiB cap.
-	result, err := h.mock.Get(ctx, "/admin/received/"+kind+"?limit=30")
-	if err != nil {
-		return failFrom(c, err)
+	type target struct {
+		key   string
+		admin *MockAdmin
 	}
-	// A received tariff is just an OCPI object — which station published it only Evolt knows.
-	// Attach that origin so the panel can label each price instead of showing bare uuids.
-	if kind == "tariffs" && h.db != nil {
-		if enriched, ok2 := h.attachTariffOrigins(ctx, result); ok2 {
-			return ok(c, enriched)
+	targets := []target{{key: "PLG", admin: h.mock}}
+	for _, p := range h.fanout {
+		targets = append(targets, target{key: strings.ToUpper(p.Key), admin: p.admin})
+	}
+	partners := make([]map[string]any, 0, len(targets))
+	for _, tg := range targets {
+		entry := map[string]any{"key": tg.key}
+		if name, err := partnerNameOf(ctx, tg.admin); err == nil {
+			entry["name"] = name
 		}
+		// limit: the panel shows the newest slice; a fully synced catalog with payloads would
+		// blow past the admin client's 1 MiB cap.
+		result, err := tg.admin.Get(ctx, "/admin/received/"+kind+"?limit=30")
+		if err != nil {
+			entry["error"] = describeErr(err)
+			partners = append(partners, entry)
+			continue
+		}
+		// A received tariff is just an OCPI object — which station published it only Evolt
+		// knows. Attach that origin so the panel can label each price instead of bare uuids.
+		if kind == "tariffs" && h.db != nil {
+			if enriched, ok2 := h.attachTariffOrigins(ctx, result); ok2 {
+				entry["data"] = enriched
+				partners = append(partners, entry)
+				continue
+			}
+		}
+		entry["data"] = json.RawMessage(result)
+		partners = append(partners, entry)
 	}
-	return ok(c, json.RawMessage(result))
+	return ok(c, map[string]any{"partners": partners})
 }
 
 func (h *Handlers) attachTariffOrigins(ctx context.Context, result json.RawMessage) (json.RawMessage, bool) {

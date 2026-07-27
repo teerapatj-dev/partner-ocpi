@@ -95,9 +95,6 @@ func (h *Handlers) FanoutHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	// Same contract as the main partner: registration ends with the real initial sync, so the
-	// EVSE-status fanout answers 1000 here instead of 2003.
-	h.initialSync(ctx, p.admin, p.Key)
 	return ok(c, json.RawMessage(result))
 }
 

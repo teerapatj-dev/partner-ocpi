@@ -488,31 +488,33 @@ func TestOcpiProxyMockDown(t *testing.T) {
 	}
 }
 
-// The initial sync is the realism contract: registration ends with the partner pulling Evolt's
-// real catalog (all pages), and it must land on the partner being registered — a write that went
-// to the main mock instead once left VCT/CHX without data and every status PATCH answered 2003.
-func TestInitialSyncTargetsTheGivenAdmin(t *testing.T) {
-	mainHit := false
+// The roaming initial sync is an explicit button, and it must reach every partner: the demo pull
+// endpoint fans out with all=true so each mock walks the whole feed itself.
+func TestPartnerPullFansOutWithAll(t *testing.T) {
+	var mainBody, altBody map[string]any
 	mock := fakeMock(t, map[string]http.HandlerFunc{
-		"POST /admin/pull/locations": func(w http.ResponseWriter, _ *http.Request) {
-			mainHit = true
-			w.Write([]byte(`{}`))
-		},
-	})
-	var got map[string]any
-	alt := fakeMock(t, map[string]http.HandlerFunc{
 		"POST /admin/pull/locations": func(w http.ResponseWriter, r *http.Request) {
-			got = mustDecode(r)
+			mainBody = mustDecode(r)
 			w.Write([]byte(`{"pages":4,"stored":69}`))
 		},
 	})
-	h := newHandlers(t, Config{}, mock, nil)
-	h.initialSync(t.Context(), NewMockAdminAt(alt.URL, adminKey, h.cfg), "vct")
-	if mainHit || got == nil {
-		t.Fatalf("mainHit=%v altCalled=%v — sync must hit the given admin only", mainHit, got != nil)
+	alt := fakeMock(t, map[string]http.HandlerFunc{
+		"POST /admin/pull/locations": func(w http.ResponseWriter, r *http.Request) {
+			altBody = mustDecode(r)
+			w.Write([]byte(`{"pages":4,"stored":69}`))
+		},
+	})
+	cfg := Config{FanoutMocks: []FanoutMock{{Key: "vct", URL: alt.URL, AdminKey: adminKey, PathPrefix: "/vct"}}}
+	h := newHandlers(t, cfg, mock, nil)
+	rec := doReq(t, h.PartnerPull, http.MethodPost, "/", `{"all":true}`, "kind", "locations")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pull failed: %d %s", rec.Code, rec.Body.String())
 	}
-	if got["all"] != true {
-		t.Fatalf("initial sync must walk every page, body=%v", got)
+	if mainBody == nil || altBody == nil {
+		t.Fatalf("both partners must be pulled: main=%v alt=%v", mainBody, altBody)
+	}
+	if mainBody["all"] != true || altBody["all"] != true {
+		t.Fatalf("all flag must pass through: main=%v alt=%v", mainBody, altBody)
 	}
 }
 
