@@ -241,6 +241,14 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
       <p class="mini">VoltCity/ChargeX ลงทะเบียนค้างไว้ → ทุก push จาก Evolt (location/status/tariff) จะยิงถึง<b>ทุกเจ้า</b>ที่ REGISTERED · ดูผลที่แท็บ Log (คอลัมน์ partner)</p>
       <div id="fanout-rows"><div class="empty">กำลังโหลด…</div></div>
     </div>
+    <div class="flow" style="margin-top:14px">
+      <h3>🔁 Credentials PUT / DELETE <span class="cardtag">EV-1714</span></h3>
+      <p class="mini">เส้นจริงตาม OCPI §7.1.2 — partner ยิง <span class="mono">PUT/DELETE /ocpi/2.2.1/credentials</span> (auth Token C) ผ่าน bff→orch→core-auth · <b>ใช้ได้เมื่อ core-auth deploy develop แล้ว</b> ระหว่างนี้จะได้ error จริงจาก Evolt</p>
+      <div class="act"><span class="lbl">เลือก partner</span>
+        <select id="sel-cred-partner"><option value="plg">PlugSiam</option><option value="vct">VoltCity</option><option value="chx">ChargeX</option></select>
+        <button onclick="runFlow('cred-put',this)">🔁 PUT — rotate token</button>
+        <button class="danger" onclick="if(confirm('DELETE credentials ที่ Evolt? partner นี้จะหลุดทะเบียนทั้งสองฝั่ง (ตาม spec)'))runFlow('cred-del',this)">🗑 DELETE — ยกเลิกตาม spec</button></div>
+    </div>
   </section>
 
   <!-- ===================== LOCATION ===================== -->
@@ -472,6 +480,10 @@ const FLOWS={
     steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง']},
   'partner-init':{title:'Handshake — Partner เริ่ม (PlugSiam → Evolt)',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/partner-init',
     steps:['mock ขอ Token A จาก orch','mock GET Evolt /versions','mock GET version details /2.2.1','mock POST /credentials → Evolt (แลก Token C)','Evolt callback ← mock /versions','ทะเบียน REGISTERED สองฝั่ง']},
+  'cred-put':{title:'Credentials — PUT rotate token (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/put',bodyFrom:()=>({partner:val('sel-cred-partner')}),
+    steps:['mock ออก token inbound ใหม่ (B\') แล้ว activate ทันที','ยิง PUT /ocpi/2.2.1/credentials (auth Token C เดิม)','Evolt rotate ฝั่งตัวเอง แล้วตอบ Token C ใหม่','mock สลับ outbound เป็น Token C ใหม่ — คู่ token ใหม่ทั้งสองทิศ','พลาดตรงไหน mock rollback token เดิม (ไม่ล็อกตัวเองตาย)']},
+  'cred-del':{title:'Credentials — DELETE unregister ตาม spec (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/delete',bodyFrom:()=>({partner:val('sel-cred-partner')}),
+    steps:['ยิง DELETE /ocpi/2.2.1/credentials (auth Token C)','Evolt revoke ทะเบียนฝั่งตัวเอง (soft-revoke)','mock ลบ registration ของตัวเอง','จบ: สองฝั่งไม่รู้จักกัน — handshake ใหม่ได้เลย']},
   'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB — ทุก partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
     steps:['ลบ registration ใน mock DB (PLG · VCT · CHX)','เคลียร์ received_* + request log ทุกเจ้า','seed own catalog ใหม่ (เริ่มสะอาด)','ลบ row ฝั่ง Evolt ของทุก party (ไม่มี DELETE /credentials ใน spec)']},
 

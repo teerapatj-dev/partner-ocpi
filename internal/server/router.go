@@ -70,6 +70,8 @@ func New(cfg config.Config, st *store.Store, cl *client.Client) *echo.Echo {
 	admin := e.Group("/admin", middleware.APIKeyAuth(cfg.AdminAPIKey))
 	admin.POST("/tokens", h.AdminCreateToken)
 	admin.POST("/handshake", h.AdminHandshake)
+	admin.PUT("/handshake", h.AdminCredentialsUpdate)
+	admin.DELETE("/handshake", h.AdminCredentialsDelete)
 	admin.GET("/tokens/current", h.AdminCurrentTokens)
 	admin.POST("/push/location", h.AdminPushLocation)
 	admin.POST("/push/evse-status", h.AdminPushEvseStatus)

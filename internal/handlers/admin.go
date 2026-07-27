@@ -76,6 +76,24 @@ func (h *Handlers) AdminHandshake(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+// AdminCredentialsUpdate drives the outbound PUT /credentials at the counterparty (token rotation).
+func (h *Handlers) AdminCredentialsUpdate(c echo.Context) error {
+	result, err := h.cl.UpdateCredentials(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "steps": result.Steps})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// AdminCredentialsDelete drives the outbound DELETE /credentials — the spec-true unregister.
+func (h *Handlers) AdminCredentialsDelete(c echo.Context) error {
+	result, err := h.cl.DeleteCredentials(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "steps": result.Steps})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
 type pushEvseStatusRequest struct {
 	LocationID string `json:"location_id"`
 	EvseUID    string `json:"evse_uid"`

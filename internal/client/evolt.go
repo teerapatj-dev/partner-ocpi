@@ -295,6 +295,95 @@ func (c *Client) Handshake(ctx context.Context, versionsURL, tokenA string) (Han
 	return out, nil
 }
 
+// UpdateCredentials rotates the pairing via PUT /credentials (OCPI §7.1.2, Evolt side EV-1714): a
+// fresh inbound token goes live first (the counterparty may call back mid-request), the PUT carries
+// it, and the response holds our new outbound token. Failure restores the previous pair — a
+// half-rotated REGISTERED counterparty would be locked out.
+func (c *Client) UpdateCredentials(ctx context.Context) (HandshakeResult, error) {
+	out := HandshakeResult{}
+	reg, err := c.st.FirstRegistered(ctx)
+	if err != nil {
+		return out, fmt.Errorf("no REGISTERED counterparty: %w", err)
+	}
+	credURL, err := c.receiverURL(reg, "credentials")
+	if err != nil {
+		return out, err
+	}
+	out.CredentialsURL = credURL
+
+	prev := reg
+	newInbound := uuid.NewString()
+	reg.TokenInbound = newInbound
+	if err := c.st.UpdateRegistration(ctx, reg); err != nil {
+		return out, fmt.Errorf("persist rotated inbound token: %w", err)
+	}
+	rollback := func() {
+		if rbErr := c.st.UpdateRegistration(ctx, prev); rbErr != nil {
+			log.Error().Err(rbErr).Msg("credentials update rollback failed — registration may need manual repair")
+		}
+	}
+
+	body := ocpi.Credentials{
+		Token: newInbound,
+		URL:   c.cfg.BaseURL + "/ocpi/versions",
+		Roles: ocpi.SelfRoles(c.cfg.CountryCode, c.cfg.PartyID, c.cfg.PartnerName),
+	}
+	res, err := c.do(ctx, http.MethodPut, credURL, reg.TokenOutbound, body, reg.CountryCode, reg.PartyID)
+	if err != nil {
+		rollback()
+		return out, fmt.Errorf("put credentials: %w", err)
+	}
+	var granted ocpi.Credentials
+	if err := parseEnvelope(res, &granted); err != nil {
+		rollback()
+		return out, fmt.Errorf("parse credentials response: %w", err)
+	}
+	if granted.Token == "" {
+		rollback()
+		return out, fmt.Errorf("counterparty returned empty token")
+	}
+	out.Steps = append(out.Steps, "PUT credentials ok — token pair rotated")
+
+	reg.TokenOutbound = granted.Token
+	if err := c.st.UpdateRegistration(ctx, reg); err != nil {
+		return out, fmt.Errorf("persist rotated outbound token: %w", err)
+	}
+	out.Counterparty = reg.CountryCode + "-" + reg.PartyID
+	out.Steps = append(out.Steps, "REGISTERED (rotated)")
+	return out, nil
+}
+
+// DeleteCredentials unregisters at the counterparty via DELETE /credentials (OCPI §7.1.2): the
+// counterparty revokes our registration on its side, then the local registration row is dropped.
+// Cached roaming data stays — it is a cache, and the wipe button clears it explicitly.
+func (c *Client) DeleteCredentials(ctx context.Context) (HandshakeResult, error) {
+	out := HandshakeResult{}
+	reg, err := c.st.FirstRegistered(ctx)
+	if err != nil {
+		return out, fmt.Errorf("no REGISTERED counterparty: %w", err)
+	}
+	credURL, err := c.receiverURL(reg, "credentials")
+	if err != nil {
+		return out, err
+	}
+	out.CredentialsURL = credURL
+
+	res, err := c.do(ctx, http.MethodDelete, credURL, reg.TokenOutbound, nil, reg.CountryCode, reg.PartyID)
+	if err != nil {
+		return out, fmt.Errorf("delete credentials: %w", err)
+	}
+	code, _ := parseAnyStatus(res.Body)
+	if res.HTTPStatus < 200 || res.HTTPStatus > 299 || code != ocpi.StatusSuccess {
+		return out, fmt.Errorf("counterparty refused the unregister: http %d ocpi %d", res.HTTPStatus, code)
+	}
+	out.Steps = append(out.Steps, "DELETE credentials ok — counterparty revoked us")
+	if err := c.st.DeleteRegistration(ctx, reg.ID); err != nil {
+		return out, fmt.Errorf("drop local registration: %w", err)
+	}
+	out.Steps = append(out.Steps, "local registration dropped")
+	return out, nil
+}
+
 func (c *Client) currentRegistration(ctx context.Context) (store.Registration, bool, error) {
 	regs, err := c.st.ListRegistrations(ctx)
 	if err != nil {

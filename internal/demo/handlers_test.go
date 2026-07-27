@@ -488,6 +488,39 @@ func TestOcpiProxyMockDown(t *testing.T) {
 	}
 }
 
+// The credentials buttons are per-partner: the body's partner key must pick the right mock, and an
+// unknown key must be refused before anything is called.
+func TestCredentialsActionsTargetThePickedPartner(t *testing.T) {
+	mainHit, altHit := false, false
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"PUT /admin/handshake": func(w http.ResponseWriter, _ *http.Request) {
+			mainHit = true
+			w.Write([]byte(`{"steps":["ok"]}`))
+		},
+	})
+	alt := fakeMock(t, map[string]http.HandlerFunc{
+		"DELETE /admin/handshake": func(w http.ResponseWriter, _ *http.Request) {
+			altHit = true
+			w.Write([]byte(`{"steps":["ok"]}`))
+		},
+	})
+	cfg := Config{FanoutMocks: []FanoutMock{{Key: "vct", URL: alt.URL, AdminKey: adminKey, PathPrefix: "/vct"}}}
+	h := newHandlers(t, cfg, mock, nil)
+
+	rec := doReq(t, h.CredentialsPut, http.MethodPost, "/", `{"partner":"plg"}`)
+	if rec.Code != http.StatusOK || !mainHit {
+		t.Fatalf("put must hit the main mock: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h.CredentialsDelete, http.MethodPost, "/", `{"partner":"vct"}`)
+	if rec.Code != http.StatusOK || !altHit {
+		t.Fatalf("delete must hit the vct mock: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h.CredentialsPut, http.MethodPost, "/", `{"partner":"zzz"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown partner must 400, got %d", rec.Code)
+	}
+}
+
 // The roaming initial sync is an explicit button, and it must reach every partner: the demo pull
 // endpoint fans out with all=true so each mock walks the whole feed itself.
 func TestPartnerPullFansOutWithAll(t *testing.T) {

@@ -711,6 +711,58 @@ func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, 
 	return out, nil
 }
 
+// adminByPartner resolves which mock a button targets: "" or "plg" = the main one, otherwise a
+// fanout key. Every credentials action takes the partner in the body so one flow serves the board.
+func (h *Handlers) adminByPartner(key string) (*MockAdmin, string, bool) {
+	key = strings.ToLower(key)
+	if key == "" || key == "plg" {
+		return h.mock, "PLG", true
+	}
+	for _, p := range h.fanout {
+		if p.Key == key {
+			return p.admin, strings.ToUpper(p.Key), true
+		}
+	}
+	return nil, "", false
+}
+
+// CredentialsPut = the partner rotates its token pair at Evolt via the real PUT /credentials
+// (EV-1714). Until Evolt's core-auth carries that code the call fails with Evolt's own error —
+// which is the honest thing to show.
+func (h *Handlers) CredentialsPut(c echo.Context) error {
+	var req struct {
+		Partner string `json:"partner"`
+	}
+	_ = c.Bind(&req)
+	admin, label, found := h.adminByPartner(req.Partner)
+	if !found {
+		return fail(c, http.StatusBadRequest, "unknown partner", nil)
+	}
+	result, err := admin.Put(c.Request().Context(), "/admin/handshake", nil)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, map[string]any{"partner": label, "result": json.RawMessage(result)})
+}
+
+// CredentialsDelete = the spec-true unregister: the partner DELETEs its credentials at Evolt, Evolt
+// revokes it there, and the mock drops its own registration. No DB reach-around involved.
+func (h *Handlers) CredentialsDelete(c echo.Context) error {
+	var req struct {
+		Partner string `json:"partner"`
+	}
+	_ = c.Bind(&req)
+	admin, label, found := h.adminByPartner(req.Partner)
+	if !found {
+		return fail(c, http.StatusBadRequest, "unknown partner", nil)
+	}
+	result, err := admin.Delete(c.Request().Context(), "/admin/handshake")
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, map[string]any{"partner": label, "result": json.RawMessage(result)})
+}
+
 // Unregister clears the partner's registration so a repeat demo starts from a
 // clean handshake. Evolt keeps its own record — it implements no DELETE
 // /credentials — so that side is cleared separately.

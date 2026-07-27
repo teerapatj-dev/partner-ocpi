@@ -86,6 +86,10 @@ func (m *MockAdmin) Post(ctx context.Context, path string, body any) (json.RawMe
 	return m.call(ctx, http.MethodPost, path, body)
 }
 
+func (m *MockAdmin) Put(ctx context.Context, path string, body any) (json.RawMessage, error) {
+	return m.call(ctx, http.MethodPut, path, body)
+}
+
 func (m *MockAdmin) Delete(ctx context.Context, path string) (json.RawMessage, error) {
 	return m.call(ctx, http.MethodDelete, path, nil)
 }
