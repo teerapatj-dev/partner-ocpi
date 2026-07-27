@@ -248,7 +248,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <p class="mini">เราเป็น CPO · ผลไปแผงขวา (DB PlugSiam)</p>
         <div class="flowhead">⬇️ PULL <span class="tagp">partner ดึงจากเรา</span></div>
         <div class="act"><span class="lbl">ดึง locations</span>
-          <button class="in" onclick="runFlow('in-loc-pull',this)">ดึง (GET /cpo)</button></div>
+          <button class="in" onclick="runFlow('in-loc-pull',this)">GET 5 รายการ</button></div>
         <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner</span></div>
         <div class="act"><span class="lbl">เลือกตู้ (evse)</span>
           <select id="sel-push-evse" title="EVSE ของสถานี demo"></select></div>
@@ -297,12 +297,9 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
             <button class="out" onclick="runFlow('out-loc-push-status',this)">PATCH</button></div>
         </details>
         <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
-        <div class="act"><span class="lbl">partner ออกของใหม่</span>
-          <button class="ghost" onclick="runFlow('partner-new-batch',this)">🌱 อัปเดต 10 รายการ</button></div>
         <div class="act"><span class="lbl">cronjob จริง</span>
-          <button class="out" id="btn-cron-loc" onclick="runFlow('out-loc-cron',this)">▶ locations_pull</button>
+          <button class="out" id="btn-cron-loc" onclick="runFlow('out-loc-cron',this)">▶ locations_pull · ได้ 10</button>
           <button class="ghost" id="btn-cron-loc-dry" onclick="runFlow('out-loc-cron-dry',this)">dry-run</button></div>
-        <p class="mini">ชุด <span class="mono">CRON-LOC-01…10</span> แยกจาก 4 ตัวที่ใช้ปุ่ม push · cron ดึงเฉพาะที่ใหม่กว่า watermark</p>
         <p class="mini" id="cron-loc-hint"></p>
       </div>
       <div class="rpanel out"><h3>🟪 ตู้ของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">ocpi_partner_*</span></h3>
@@ -325,7 +322,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="in" onclick="runFlow('evolt-tariff-backfill',this)">🌱 Backfill</button></div>
         <div class="flowhead">⬇️ PULL <span class="tagp">partner ดึงจากเรา</span></div>
         <div class="act"><span class="lbl">ดึง tariffs</span>
-          <button class="in" onclick="runFlow('in-trf-pull',this)">ดึง (GET /cpo)</button></div>
+          <button class="in" onclick="runFlow('in-trf-pull',this)">GET 5 รายการ</button></div>
         <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner (fanout)</span></div>
         <div class="act"><span class="lbl">push 1 station</span>
           <select id="sel-station"></select><button class="in" onclick="runFlow('in-trf-push',this)">สั่ง push</button></div>
@@ -343,12 +340,9 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="out" onclick="runFlow('out-trf-push',this)">PUT (upsert)</button>
           <button class="danger" onclick="runFlow('out-trf-del',this)">DELETE (soft)</button></div>
         <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
-        <div class="act"><span class="lbl">partner ออกของใหม่</span>
-          <button class="ghost" onclick="runFlow('partner-new-batch',this)">🌱 อัปเดต 10 รายการ</button></div>
         <div class="act"><span class="lbl">cronjob จริง</span>
-          <button class="out" id="btn-cron-trf" onclick="runFlow('out-trf-cron',this)">▶ tariffs_pull</button>
+          <button class="out" id="btn-cron-trf" onclick="runFlow('out-trf-cron',this)">▶ tariffs_pull · ได้ 10</button>
           <button class="ghost" id="btn-cron-trf-dry" onclick="runFlow('out-trf-cron-dry',this)">dry-run</button></div>
-        <p class="mini">ชุด <span class="mono">CRON-TAR-01…10</span> แยกจาก 3 ตัวที่ใช้ปุ่ม push · cron ดึงเฉพาะที่ใหม่กว่า watermark</p>
         <p class="mini" id="cron-trf-hint"></p>
       </div>
       <div class="rpanel out"><h3>🟪 ราคาของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">อ่านกลับ</span></h3>
@@ -485,15 +479,13 @@ const FLOWS={
     steps:['partner ยิง PUT /ocpi/emsp/2.2.1/tariffs/{cc}/{pid}/{id} (token-in)','bff → orch → core-auth verify','orch → roaming: upsert (เจอ key เดิมเขียนทับ)','ตอบ 1000']},
   'out-trf-del':{title:'Roaming Out · Tariff — partner ลบ tariff',card:'EV-1585',dir:'out',method:'DELETE',urlFrom:()=>'/api/demo/push/tariff/'+encodeURIComponent(val('sel-tariff')),
     steps:['partner ยิง DELETE .../tariffs/{cc}/{pid}/{id} (token-in)','orch → roaming: soft-delete (ปั๊ก deleted_at)','ตอบ 1000']},
-  'partner-new-batch':{title:'partner ออกข้อมูลใหม่ 10 รายการ (ชุด cron)',card:'mock',dir:'out',method:'POST',url:'/api/demo/partner/new-batch',
-    steps:['mock ปั๊ก last_updated ของชุด cron เป็นเวลาปัจจุบัน (location 10 + tariff 10)','ของชุดนี้เลยใหม่กว่า watermark ที่ Evolt ถืออยู่','cron รอบถัดไปจะดึงมาครบ 10 รายการ']},
-  'out-loc-cron':{title:'Roaming Out · Location — รัน cronjob จริง (locations_pull)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:false},
+  'out-loc-cron':{title:'Roaming Out · Location — รัน cronjob จริง (locations_pull)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:false,refresh:true},
     steps:['batch ถาม core-auth: partner ที่เป็น sender + มี locations','ถอดรหัส token partner (AES key เดียวกับ orch)','อ่าน watermark จาก roaming แล้ว page ผ่าน adapter','upsert ทุก location → ocpi_partner_*']},
-  'out-loc-cron-dry':{title:'Roaming Out · Location — cronjob dry-run (ไม่เขียน)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:true},
+  'out-loc-cron-dry':{title:'Roaming Out · Location — cronjob dry-run (ไม่เขียน)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:true,refresh:true},
     steps:['เหมือน cronjob จริงทุกขั้น','ยกเว้นขั้น upsert — นับอย่างเดียว ไม่เขียน DB']},
-  'out-trf-cron':{title:'Roaming Out · Tariff — รัน cronjob จริง (tariffs_pull)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/batch/tariffs_pull',body:{dry_run:false},
+  'out-trf-cron':{title:'Roaming Out · Tariff — รัน cronjob จริง (tariffs_pull)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/batch/tariffs_pull',body:{dry_run:false,refresh:true},
     steps:['batch ถาม core-auth: partner ที่เป็น sender + มี tariffs','ถอดรหัส token partner (AES key เดียวกับ orch)','อ่าน watermark จาก roaming แล้ว page ผ่าน adapter','upsert ทุก tariff → ocpi_partner_tariffs']},
-  'out-trf-cron-dry':{title:'Roaming Out · Tariff — cronjob dry-run (ไม่เขียน)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/batch/tariffs_pull',body:{dry_run:true},
+  'out-trf-cron-dry':{title:'Roaming Out · Tariff — cronjob dry-run (ไม่เขียน)',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/evolt/batch/tariffs_pull',body:{dry_run:true,refresh:true},
     steps:['เหมือน cronjob จริงทุกขั้น','ยกเว้นขั้น upsert — นับอย่างเดียว ไม่เขียน DB']},
 };
 
@@ -714,7 +706,7 @@ async function refreshStationEvses(){
     const sel=$('sel-push-evse');if(!sel)return;
     if(!j.ok||!j.data){sel.innerHTML='<option value="">(ตั้ง EVOLT_DB_DSN)</option>';return}
     const keep=sel.value;sel.innerHTML='';
-    j.data.forEach(e=>sel.add(new Option(`${e.ocpi_uid} · ${e.uid} (${e.ocpp_status})`,e.id)));
+    j.data.forEach(e=>sel.add(new Option(`${e.ocpi_uid} · partner: ${e.in_partner?e.partner_status:'ยังไม่มี'} · evolt: ${e.ocpp_status}`,e.id)));
     if(keep)sel.value=keep;
   }catch(e){}
 }
@@ -727,7 +719,7 @@ async function refreshOwn(){
     if(locs.ok){
       const sl=$('sel-location'),se=$('sel-evse');const kl=sl.value,ke=se.value;sl.innerHTML='';se.innerHTML='';
       (locs.data||[]).forEach(l=>{sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
-        (l.evses||[]).forEach(e=>se.add(new Option(`${e.uid} (${l.id})`,e.uid)));});
+        (l.evses||[]).forEach(e=>se.add(new Option(`${e.uid} · ${e.status||'—'} (${l.id})`,e.uid)));});
       if(kl)sl.value=kl;if(ke)se.value=ke;
     }
     if(trfs.ok){const st=$('sel-tariff'),keep=st.value;st.innerHTML='';(trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));if(keep)st.value=keep;}
@@ -834,6 +826,7 @@ async function refreshMirror(){
       `<span class="when">${wl?esc(ago(wl)):'—'}</span></div>`+
       `<div class="when">${wl?'ข้อมูลล่าสุด: <span class="mono">'+esc(thTime(wl))+'</span>':'ยังไม่มี — กด Roaming Out · Location'}</div></div>`);
     (d.notes||[]).forEach(n=>lh.push(`<div class="note">⚠️ ${esc(n)}</div>`));
+    lh.push(...partnerCacheCards());
     $('res-loc-out').innerHTML=lh.join('');
     // tariff out
     const th=[];const wt=(d.tariffs||{}).date_from,ft=changed('wm:tariffs',String(wt))?' flash':'';
@@ -851,6 +844,33 @@ async function refreshMirror(){
     }
     $('res-trf-out').innerHTML=th.join('');
   }catch(e){}
+}
+
+/* Evolt's partner cache, rendered like the mock's side so the two directions read the same. Kept in
+   a module-level cache: it polls on its own clock, the mirror redraws on its own. */
+let partnerCache=[];
+async function refreshPartnerCache(){
+  try{
+    const r=await api('/api/demo/evolt/partner-cache');const j=await r.json();
+    if(!j.ok)return;
+    partnerCache=(j.data||{}).locations||[];
+    if($('res-loc-out')&&!$('location-out').classList.contains('hidden'))refreshMirror();
+  }catch(e){}
+}
+function partnerCacheCards(){
+  if(!partnerCache.length)return ['<div class="empty">Evolt ยังไม่มีตู้ของ partner<br>กด PUT / PATCH หรือ locations_pull</div>'];
+  return partnerCache.map(l=>{
+    const chips=(l.evses||[]).map(e=>{
+      const st=e.status||'UNKNOWN',f=changed('pc:'+l.location_id+'/'+e.uid,st+'|'+e.last_updated)?' flash':'';
+      return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc(e.uid)}</span></span>`;
+    }).join('');
+    const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
+    const f=changed('pcl:'+l.location_id,when)?' flash':'';
+    return `<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
+      `<span class="when mono">${esc(l.location_id)}</span></div>`+
+      `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
+      `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div></div>`;
+  });
 }
 
 // ---- request log ----
@@ -936,11 +956,12 @@ async function loadTablePage(){
 
 // ---- boot ----
 chgBindSlider('in');chgBindSlider('out');
-refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();refreshStationEvses();
+refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();refreshStationEvses();refreshPartnerCache();
 setInterval(refreshStationEvses,8000);
 setInterval(refreshState,3000);
 setInterval(refreshLog,3000);
 setInterval(refreshPartnerData,2500);
+setInterval(refreshPartnerCache,2500);
 setInterval(refreshMirror,5000);
 setInterval(refreshOwn,15000);
 </script>

@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -81,6 +82,30 @@ func TestDBEndpointsRequireDB(t *testing.T) {
 	rec = doReq(t, h.InitEvolt, http.MethodPost, "/api/demo/evolt/seed", "")
 	if got := decode(t, rec); got.ok {
 		t.Errorf("InitEvolt should fail without a DB: %s", rec.Body.String())
+	}
+}
+
+// A cross-DB column has no SQL behind it on the side being queried, so filtering on it would either
+// error at the database or silently search the wrong thing.
+func TestCrossDBColumnIsNotSearchable(t *testing.T) {
+	for name, spec := range browsableTables {
+		if spec.join == nil {
+			continue
+		}
+		if !contains(spec.columns, spec.join.column) || !contains(spec.columns, spec.join.key) {
+			t.Errorf("%s: join column %q / key %q must both be listed columns", name, spec.join.column, spec.join.key)
+		}
+		if spec.join.side == spec.side {
+			t.Errorf("%s: a cross-DB join to its own side (%s) should be a plain SQL join", name, spec.side)
+		}
+		if _, isExpr := spec.expr[spec.join.column]; isExpr {
+			t.Errorf("%s: %q cannot be both a SQL expression and cross-DB filled", name, spec.join.column)
+		}
+	}
+	b := &DBBrowser{tables: browsableTables}
+	_, err := b.Query(context.Background(), "received_tariffs", "station_id", "x", 1)
+	if err == nil || !strings.Contains(err.Error(), "tariff_id") {
+		t.Fatalf("filtering a cross-DB column must be refused with a hint, got %v", err)
 	}
 }
 

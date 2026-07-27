@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -387,11 +388,22 @@ func (h *Handlers) PartnerPull(c echo.Context) error {
 func (h *Handlers) EvoltBatchRun(c echo.Context) error {
 	var req struct {
 		DryRun bool `json:"dry_run"`
+		// Refresh re-publishes the partner's cron batch first. A cron only collects what changed
+		// since its watermark, so without it every run after the first returns nothing — which reads
+		// as a broken job rather than as the incremental sync it is.
+		Refresh bool `json:"refresh"`
 	}
 	// The body is optional — an absent one means a real run.
 	_ = c.Bind(&req)
 
-	result, err := h.batch.Run(c.Request().Context(), c.Param("job"), req.DryRun)
+	ctx := c.Request().Context()
+	if req.Refresh {
+		if _, err := h.mock.Post(ctx, "/admin/seed/new-batch", nil); err != nil {
+			return failFrom(c, err)
+		}
+	}
+
+	result, err := h.batch.Run(ctx, c.Param("job"), req.DryRun)
 	if err != nil {
 		if errors.Is(err, errBatchUnavailable) {
 			return fail(c, http.StatusConflict, err.Error(), nil)
@@ -522,11 +534,64 @@ func (h *Handlers) StationEvses(c echo.Context) error {
 	if h.db == nil {
 		return fail(c, http.StatusBadRequest, "EVOLT_DB_DSN not configured — no station EVSEs", nil)
 	}
-	evses, err := h.db.DemoStationEvses(c.Request().Context())
+	ctx := c.Request().Context()
+	evses, err := h.db.DemoStationEvses(ctx)
 	if err != nil {
 		return fail(c, http.StatusBadGateway, err.Error(), nil)
 	}
+	// The picker offers what the partner actually holds, so what you see listed is what a PATCH can
+	// land on. A partner that is unreachable just leaves the statuses blank rather than failing.
+	if held, err := h.partnerEvseStatuses(ctx); err == nil {
+		for i, e := range evses {
+			if status, found := held[e.OCPIUID]; found {
+				evses[i].PartnerStatus, evses[i].InPartner = status, true
+			}
+		}
+	}
 	return ok(c, evses)
+}
+
+// PartnerCache answers what Evolt currently holds for this partner — locations with their EVSE
+// statuses, the eMSP-side counterpart of the panel the mock fills for Roaming In.
+func (h *Handlers) PartnerCache(c echo.Context) error {
+	if h.db == nil {
+		return fail(c, http.StatusBadRequest, "EVOLT_DB_DSN not configured", nil)
+	}
+	ctx := c.Request().Context()
+	countryCode, partyID, err := h.partnerParty(ctx)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	locations, err := h.db.PartnerCacheLocations(ctx, countryCode, partyID, 25)
+	if err != nil {
+		return fail(c, http.StatusBadGateway, err.Error(), nil)
+	}
+	return ok(c, map[string]any{"country_code": countryCode, "party_id": partyID, "locations": locations})
+}
+
+// partnerEvseStatuses maps the partner's received EVSE uid to the status it currently holds.
+func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, error) {
+	raw, err := h.mock.Get(ctx, "/admin/received/locations")
+	if err != nil {
+		return nil, err
+	}
+	// ReceivedRow serializes "<location>/<evse_uid>" as "key" (store/received.go).
+	var received struct {
+		Evses []struct {
+			Key    string `json:"key"`
+			Status string `json:"status"`
+		} `json:"evses"`
+	}
+	if err := json.Unmarshal(raw, &received); err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(received.Evses))
+	for _, e := range received.Evses {
+		if i := strings.LastIndex(e.Key, "/"); i >= 0 {
+			out[e.Key[i+1:]] = e.Status
+		}
+	}
+	return out, nil
 }
 
 // ensureKafkaBaseline injects a minimal received location for the configured
@@ -605,16 +670,6 @@ func (h *Handlers) Unregister(c echo.Context) error {
 // ClearRequests empties just the partner's request log (own/received data untouched).
 func (h *Handlers) ClearRequests(c echo.Context) error {
 	result, err := h.mock.Delete(c.Request().Context(), "/admin/requests")
-	if err != nil {
-		return failFrom(c, err)
-	}
-	return ok(c, json.RawMessage(result))
-}
-
-// PartnerNewBatch has the partner republish its cron batch with a fresh timestamp, giving the next
-// pull-cron run something to collect.
-func (h *Handlers) PartnerNewBatch(c echo.Context) error {
-	result, err := h.mock.Post(c.Request().Context(), "/admin/seed/new-batch", nil)
 	if err != nil {
 		return failFrom(c, err)
 	}

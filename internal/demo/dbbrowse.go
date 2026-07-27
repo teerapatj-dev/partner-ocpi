@@ -36,6 +36,17 @@ type tableSpec struct {
 	from    string            // optional FROM clause (e.g. a jsonb unnest); default = the table name. Constant.
 	orderBy string            // constant, from this file only
 	scope   string            // constant WHERE fragment always applied (uses $1.. bound from scopeArgs); "" = none
+	join    *crossDBJoin      // optional column filled from the other database after the query
+}
+
+// crossDBJoin fills a column from the other side's database. OCPI carries no station on a Tariff, so
+// the only way to answer "which station published this price" on the partner's side is to resolve it
+// against Evolt's own materialised table — one lookup per page, not a join the database can do.
+type crossDBJoin struct {
+	column string // the column in spec.columns that this fills; never selected from SQL
+	key    string // the column in spec.columns whose value is looked up
+	side   string // which pool answers the lookup
+	sql    string // constant, from this file only: SELECT <key>, <value> ... WHERE <key> = ANY($1)
 }
 
 // exprOf returns the SQL that produces a column's value — a jsonb extract for received_* payload
@@ -66,7 +77,16 @@ var browsableTables = map[string]tableSpec{
 	"ocpi_partner_locations":   {side: "evolt", columns: []string{"id", "credentials_id", "country_code", "party_id", "location_id", "name", "address", "city", "publish", "last_updated", "synced_at"}, orderBy: "last_updated DESC"},
 	"ocpi_partner_evses":       {side: "evolt", columns: []string{"id", "location_id", "evse_uid", "evse_id", "status", "last_updated", "synced_at"}, orderBy: "last_updated DESC"},
 	"ocpi_partner_connectors":  {side: "evolt", columns: []string{"id", "evse_id", "connector_id", "standard", "format", "power_type", "max_electric_power", "last_updated", "synced_at"}, orderBy: "connector_id"},
-	"ocpi_partner_tariffs":     {side: "evolt", columns: []string{"id", "credentials_id", "country_code", "party_id", "tariff_id", "currency", "type", "min_price_incl_vat", "max_price_incl_vat", "last_updated", "synced_at", "deleted_at"}, orderBy: "last_updated DESC"},
+	"ocpi_partner_tariffs": {side: "evolt", columns: []string{"tariff_id", "name", "price", "price_type", "vat", "days", "hours", "elements", "currency", "type", "min_price_incl_vat", "max_price_incl_vat", "start_date_time", "end_date_time", "last_updated", "synced_at", "deleted_at"},
+		expr: map[string]string{
+			"name":       `tariff_alt_text->0->>'text'`,
+			"price":      `elements->0->'price_components'->0->>'price'`,
+			"price_type": `elements->0->'price_components'->0->>'type'`,
+			"vat":        `elements->0->'price_components'->0->>'vat'`,
+			"days":       `array_to_string(ARRAY(SELECT jsonb_array_elements_text(COALESCE(elements->0->'restrictions'->'day_of_week','[]'::jsonb))), ',')`,
+			"hours":      `concat_ws('-', elements->0->'restrictions'->>'start_time', elements->0->'restrictions'->>'end_time')`,
+			"elements":   `jsonb_array_length(elements)`,
+		}, orderBy: "last_updated DESC"},
 	// Partner (mock DB) — what PlugSiam holds. registrations.token_* / request_log.body_excerpt omitted on purpose.
 	"registrations": {side: "partner", columns: []string{"id", "party_name", "country_code", "party_id", "status", "initiated_by", "versions_url", "created_at", "updated_at"}, orderBy: "id"},
 	// partner_endpoints: what the mock stored of Evolt's OCPI endpoints (registrations.endpoints jsonb),
@@ -85,8 +105,21 @@ var browsableTables = map[string]tableSpec{
 		expr: map[string]string{"evse_id": "payload->>'evse_id'"}, orderBy: "synced_at DESC"},
 	"received_connectors": {side: "partner", columns: []string{"country_code", "party_id", "location_id", "evse_uid", "connector_id", "standard", "format", "power_type", "max_electric_power", "last_updated", "synced_at"},
 		expr: map[string]string{"standard": "payload->>'standard'", "format": "payload->>'format'", "power_type": "payload->>'power_type'", "max_electric_power": "payload->>'max_electric_power'"}, orderBy: "synced_at DESC"},
-	"received_tariffs": {side: "partner", columns: []string{"country_code", "party_id", "tariff_id", "currency", "type", "last_updated", "synced_at"},
-		expr: map[string]string{"currency": "payload->>'currency'", "type": "payload->>'type'"}, orderBy: "synced_at DESC"},
+	"received_tariffs": {side: "partner", columns: []string{"tariff_id", "station_id", "name", "price", "price_type", "vat", "days", "hours", "elements", "currency", "type", "country_code", "party_id", "last_updated", "synced_at"},
+		expr: map[string]string{
+			"currency":   "payload->>'currency'",
+			"type":       "payload->>'type'",
+			"name":       `payload->'tariff_alt_text'->0->>'text'`,
+			"price":      `payload->'elements'->0->'price_components'->0->>'price'`,
+			"price_type": `payload->'elements'->0->'price_components'->0->>'type'`,
+			"vat":        `payload->'elements'->0->'price_components'->0->>'vat'`,
+			"days":       `array_to_string(ARRAY(SELECT jsonb_array_elements_text(COALESCE(payload->'elements'->0->'restrictions'->'day_of_week','[]'::jsonb))), ',')`,
+			"hours":      `concat_ws('-', payload->'elements'->0->'restrictions'->>'start_time', payload->'elements'->0->'restrictions'->>'end_time')`,
+			"elements":   `jsonb_array_length(payload->'elements')`,
+		},
+		orderBy: "synced_at DESC",
+		join: &crossDBJoin{column: "station_id", key: "tariff_id", side: "evolt",
+			sql: `SELECT id::text, station_id::text FROM evolt_ocpi_tariff WHERE id::text = ANY($1)`}},
 	"request_log": {side: "partner", columns: []string{"id", "ts", "direction", "method", "path", "http_status", "ocpi_status_code", "counterparty", "auth_present"}, orderBy: "id DESC"},
 }
 
@@ -218,12 +251,15 @@ func (b *DBBrowser) Query(ctx context.Context, table, filterCol, filterVal strin
 	if !ok {
 		return nil, fmt.Errorf("unknown table")
 	}
+	if filterCol != "" && !contains(spec.columns, filterCol) {
+		return nil, fmt.Errorf("unknown column")
+	}
+	if spec.join != nil && filterCol == spec.join.column {
+		return nil, fmt.Errorf("ค้นหาคอลัมน์นี้ไม่ได้ — ค่ามาจาก DB อีกฝั่ง ให้ค้นด้วย %s แทน", spec.join.key)
+	}
 	pool := b.poolFor(spec.side)
 	if pool == nil {
 		return nil, fmt.Errorf("%s database not configured", spec.side)
-	}
-	if filterCol != "" && !contains(spec.columns, filterCol) {
-		return nil, fmt.Errorf("unknown column")
 	}
 	if page < 1 {
 		page = 1
@@ -263,6 +299,10 @@ func (b *DBBrowser) Query(ctx context.Context, table, filterCol, filterVal strin
 
 	sel := make([]string, len(spec.columns))
 	for i, c := range spec.columns {
+		if spec.join != nil && c == spec.join.column {
+			sel[i] = "NULL::text" // filled after the query, from the other database
+			continue
+		}
 		sel[i] = "(" + spec.exprOf(c) + ")::text"
 	}
 	q := fmt.Sprintf("SELECT %s FROM %s%s ORDER BY %s LIMIT %d OFFSET %d",
@@ -288,11 +328,75 @@ func (b *DBBrowser) Query(ctx context.Context, table, filterCol, filterVal strin
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	// A failed lookup leaves the column blank: the page still shows the rows the table does hold.
+	if spec.join != nil {
+		_ = b.fillCrossDB(ctx, spec, out)
+	}
 
 	return &BrowseResult{
 		Table: table, Side: spec.side, Columns: spec.columns,
 		Rows: out, Total: total, Page: page, Pages: pages, PageSize: browsePageSize,
 	}, nil
+}
+
+func (b *DBBrowser) fillCrossDB(ctx context.Context, spec tableSpec, rows [][]*string) error {
+	pool := b.poolFor(spec.join.side)
+	if pool == nil {
+		return fmt.Errorf("%s database not configured", spec.join.side)
+	}
+	keyIdx, valIdx := indexOf(spec.columns, spec.join.key), indexOf(spec.columns, spec.join.column)
+	if keyIdx < 0 || valIdx < 0 {
+		return fmt.Errorf("join columns not in the table")
+	}
+
+	keys := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r[keyIdx] != nil {
+			keys = append(keys, *r[keyIdx])
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	found, err := pool.Query(ctx, spec.join.sql, keys)
+	if err != nil {
+		return err
+	}
+	defer found.Close()
+	lookup := map[string]string{}
+	for found.Next() {
+		var k, v *string
+		if err := found.Scan(&k, &v); err != nil {
+			return err
+		}
+		if k != nil && v != nil {
+			lookup[*k] = *v
+		}
+	}
+	if err := found.Err(); err != nil {
+		return err
+	}
+
+	for _, r := range rows {
+		if r[keyIdx] == nil {
+			continue
+		}
+		if v, hit := lookup[*r[keyIdx]]; hit {
+			val := v
+			r[valIdx] = &val
+		}
+	}
+	return nil
+}
+
+func indexOf(list []string, want string) int {
+	for i, v := range list {
+		if v == want {
+			return i
+		}
+	}
+	return -1
 }
 
 // SeedEvoltSelf inserts Evolt's own OCPI identity (is_self=true, party TH/EVT) into the three
@@ -317,10 +421,14 @@ func (b *DBBrowser) SeedEvoltSelf(ctx context.Context) (map[string]int, error) {
 		table string
 		sql   string
 	}{
+		// The self row is our own identity, not a handshake waiting on a counterparty, so it lands
+		// REGISTERED. Conflicts repair the status rather than skip: a row seeded PENDING earlier
+		// otherwise stays that way forever, since the id never changes.
 		{"ocpi_credentials", `
-			INSERT INTO ocpi_credentials (id, partner_name, is_self, status, initiated_by, version)
-			VALUES ('ddd81667-4652-4768-ab9c-cbe94c65540e', 'Evolt', true, 'PENDING', 'SELF', '2.2.1')
-			ON CONFLICT (id) DO NOTHING`},
+			INSERT INTO ocpi_credentials (id, partner_name, is_self, status, initiated_by, version, registered_at)
+			VALUES ('ddd81667-4652-4768-ab9c-cbe94c65540e', 'Evolt', true, 'REGISTERED', 'SELF', '2.2.1', now())
+			ON CONFLICT (id) DO UPDATE SET status = 'REGISTERED',
+				registered_at = COALESCE(ocpi_credentials.registered_at, now())`},
 		{"ocpi_credentials_roles", `
 			INSERT INTO ocpi_credentials_roles (credentials_id, role, party_id, country_code, business_name)
 			VALUES
@@ -360,6 +468,73 @@ type DemoEvse struct {
 	UID        string `json:"uid"`
 	OCPIUID    string `json:"ocpi_uid"`
 	OcppStatus string `json:"ocpp_status"`
+	// What the partner holds for this EVSE right now. Empty means the partner has no row for it,
+	// so a PATCH would answer 2003 until a baseline lands.
+	PartnerStatus string `json:"partner_status"`
+	InPartner     bool   `json:"in_partner"`
+}
+
+// PartnerCacheLocation is one partner location as Evolt cached it, with the EVSE statuses under it —
+// the eMSP-side mirror of what the mock shows for the other direction.
+type PartnerCacheLocation struct {
+	LocationID  string             `json:"location_id"`
+	Name        string             `json:"name"`
+	City        string             `json:"city"`
+	LastUpdated string             `json:"last_updated"`
+	Evses       []PartnerCacheEvse `json:"evses"`
+}
+
+type PartnerCacheEvse struct {
+	UID         string `json:"uid"`
+	Status      string `json:"status"`
+	LastUpdated string `json:"last_updated"`
+}
+
+// PartnerCacheLocations reads what Evolt holds for one partner. Neither table carries a soft-delete
+// column (only ocpi_partner_tariffs does), so every cached row counts.
+func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, partyID string, limit int) ([]PartnerCacheLocation, error) {
+	if b.evolt == nil {
+		return nil, fmt.Errorf("evolt database not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	rows, err := b.evolt.Query(ctx, `
+		SELECT l.location_id, COALESCE(l.name,''), COALESCE(l.city,''),
+		       to_char(l.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),
+		       COALESCE(e.evse_uid,''), COALESCE(e.status,''),
+		       COALESCE(to_char(e.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),'')
+		FROM ocpi_partner_locations l
+		LEFT JOIN ocpi_partner_evses e ON e.location_id = l.id
+		WHERE l.country_code = $1 AND l.party_id = $2
+		ORDER BY l.last_updated DESC, l.location_id, e.evse_uid
+		LIMIT $3`, countryCode, partyID, limit*8)
+	if err != nil {
+		return nil, fmt.Errorf("read partner cache: %w", err)
+	}
+	defer rows.Close()
+
+	out := []PartnerCacheLocation{}
+	byID := map[string]int{}
+	for rows.Next() {
+		var locID, name, city, locUpdated, evseUID, status, evseUpdated string
+		if err := rows.Scan(&locID, &name, &city, &locUpdated, &evseUID, &status, &evseUpdated); err != nil {
+			return nil, err
+		}
+		idx, seen := byID[locID]
+		if !seen {
+			if len(out) >= limit {
+				continue
+			}
+			out = append(out, PartnerCacheLocation{LocationID: locID, Name: name, City: city, LastUpdated: locUpdated})
+			idx = len(out) - 1
+			byID[locID] = idx
+		}
+		if evseUID != "" {
+			out[idx].Evses = append(out[idx].Evses, PartnerCacheEvse{UID: evseUID, Status: status, LastUpdated: evseUpdated})
+		}
+	}
+	return out, rows.Err()
 }
 
 // DemoStationEvses lists the demo station's EVSEs so the UI can offer them as push targets.

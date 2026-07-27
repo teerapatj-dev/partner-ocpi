@@ -284,20 +284,6 @@ func TestPushEvseStatusResolvesLocation(t *testing.T) {
 	}
 }
 
-func TestPartnerNewBatch(t *testing.T) {
-	mock := fakeMock(t, map[string]http.HandlerFunc{
-		"POST /admin/seed/new-batch": jsonResp(`{"locations":10,"tariffs":10,"last_updated":"2026-07-27T04:00:00Z"}`),
-	})
-	h := newHandlers(t, Config{}, mock, nil)
-	rec := doReq(t, h.PartnerNewBatch, http.MethodPost, "/", "")
-	if got := decode(t, rec); rec.Code != http.StatusOK || !got.ok {
-		t.Fatalf("new batch failed: %d %s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), `"locations":10`) {
-		t.Fatalf("counts not passed through: %s", rec.Body.String())
-	}
-}
-
 // The push pickers must keep listing the hand-picked objects only, or the batch buries them.
 func TestOwnForwardsSourceFilter(t *testing.T) {
 	var gotQuery string
