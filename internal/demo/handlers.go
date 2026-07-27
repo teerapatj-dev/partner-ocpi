@@ -105,6 +105,7 @@ func (h *Handlers) State(c echo.Context) error {
 		"batch_jobs":       h.batch.Jobs(),
 		"allowed_stations": h.cfg.AllowedStations,
 		"station_names":    stationNames,
+		"demo_station_id":  h.cfg.KafkaStationID,
 		"public_base_url":  h.cfg.PublicBaseURL,
 		"degraded":         degraded,
 		"time":             time.Now().UTC().Format(time.RFC3339),

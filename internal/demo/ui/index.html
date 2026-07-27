@@ -49,6 +49,10 @@ main{max-width:1500px;margin:0 auto;padding:16px 22px}
 .flow .mini,.rpanel .mini{color:var(--muted);font-size:11.5px;margin:0 0 12px}
 .charger{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
 .chgtop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.chgtarget{font-size:11.5px;color:var(--muted);margin-bottom:8px;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.chgtarget b{color:var(--text)}
+.fresh{border-color:var(--green)!important;box-shadow:0 0 0 1px var(--green) inset}
+.freshtag{color:var(--green);font-size:10px;border:1px solid currentColor;border-radius:8px;padding:0 6px;margin-left:6px}
 .chgstate{font:600 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.4px;padding:5px 9px;border-radius:6px;
   background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
 .chgstate.on{background:rgba(62,207,142,.14);color:var(--green);border-color:rgba(62,207,142,.45)}
@@ -251,8 +255,9 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="in" onclick="runFlow('in-loc-pull-all',this)">⬇ ทุก partner ดึง locations ทั้งหมด</button></div>
         <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner</span></div>
         <div class="act"><span class="lbl">เลือกตู้ (evse)</span>
-          <select id="sel-push-evse" title="EVSE ของสถานี demo"></select></div>
+          <select id="sel-push-evse" title="EVSE ของสถานี demo" onchange="labelPushTargets()"></select></div>
         <div class="charger in" id="chg-in">
+          <div class="chgtarget" id="chg-in-target">—</div>
           <div class="chgtop"><span class="chgstate" id="chg-in-state">AVAILABLE</span>
             <span class="chgmeter" id="chg-in-meter">พร้อมใช้งาน</span></div>
           <div class="slider" id="chg-in-slider" tabindex="0" role="button" aria-label="เลื่อนเพื่อเริ่มชาร์จ">
@@ -287,11 +292,12 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="out" onclick="runFlow('out-evse-put',this)">PUT ทั้งก้อน</button>
           <button class="out" onclick="runFlow('out-evse-patch',this)">PATCH สถานะ</button></div>
         <div class="act"><span class="lbl">3️⃣ Connector</span>
-          <select id="sel-connector"></select>
+          <select id="sel-connector" onchange="labelPushTargets()"></select>
           <button class="out" onclick="runFlow('out-conn-put',this)">PUT ทั้งก้อน</button>
-          <button class="out" onclick="runFlow('out-conn-patch',this)">PATCH ลด/คืนกำลังไฟ</button></div>
+          <button class="out" id="btn-conn-patch" onclick="runFlow('out-conn-patch',this)">PATCH กำลังไฟ</button></div>
         <p class="mini">PATCH EVSE ส่งแค่ <span class="mono">status</span> — เหมือนที่สไลด์ด้านล่างยิง (call ที่ CPO ใช้บ่อยที่สุด)</p>
         <div class="charger out" id="chg-out">
+          <div class="chgtarget" id="chg-out-target">—</div>
           <div class="chgtop"><span class="chgstate" id="chg-out-state">AVAILABLE</span>
             <span class="chgmeter" id="chg-out-meter">พร้อมใช้งาน</span></div>
           <div class="slider" id="chg-out-slider" tabindex="0" role="button" aria-label="เลื่อนเพื่อเริ่มชาร์จ">
@@ -734,6 +740,7 @@ async function refreshState(){
     const sel=$('sel-station');
     if(sel.options.length===0&&(d.allowed_stations||[]).length)
       d.allowed_stations.forEach(s=>sel.add(new Option((d.station_names||{})[s]||s.slice(0,8)+'…',s)));
+    if(d.demo_station_id)demoStationName=(d.station_names||{})[d.demo_station_id]||'';
     window._st=d;renderHandshake();
     if(p&&p.counts)$('counts').innerHTML=Object.entries(p.counts).map(([k,v])=>`<div>${k}<b>${v}</b></div>`).join('');
   }catch(e){badge($('b-evolt'),'demo backend ล่ม','off')}
@@ -750,6 +757,7 @@ async function refreshStationEvses(){
     if(!held.length){sel.innerHTML='<option value="">(partner ยังไม่มีตู้ — กด Handshake ก่อน)</option>';return}
     held.forEach(e=>sel.add(new Option(`${e.ocpi_uid} · partner: ${e.partner_status} · evolt: ${e.ocpp_status}`,e.id)));
     if(keep)sel.value=keep;
+    labelPushTargets();
   }catch(e){}
 }
 
@@ -772,7 +780,7 @@ async function refreshOwn(){
 
 /* The PATCH buttons must send a real change, so the new value is derived from what the partner
    currently holds (loaded with the pickers) rather than a constant that could already be in place. */
-let ownLocs=[];
+let ownLocs=[],demoStationName='';
 function currentLoc(){return ownLocs.find(l=>l.id===val('sel-location'))||null}
 function currentEvse(){
   const l=currentLoc();if(!l)return null;
@@ -795,6 +803,30 @@ function fillConnectors(){
   ((e&&e.connectors)||[]).forEach(cn=>sc.add(new Option(
     `${cn.id} · ${cn.standard||''} ${Math.round((cn.max_electric_power||0)/1000)}kW`,cn.id)));
   if(keep&&((e&&e.connectors)||[]).some(c=>c.id===keep))sc.value=keep;
+  labelPushTargets();
+}
+/* Both the derate button and the sliders act on whatever the pickers point at, so they say so:
+   a button reading "PATCH กำลังไฟ" gives no clue that pressing it halves 22kW to 11kW. */
+function labelPushTargets(){
+  const b=$('btn-conn-patch');
+  if(b){
+    const c=currentConn();
+    if(!c)b.textContent='PATCH กำลังไฟ';
+    else{
+      const now=Math.round((c.max_electric_power||0)/1000),next=Math.round(nextConnPower()/1000);
+      b.textContent=`PATCH กำลังไฟ ${now}kW → ${next}kW`;
+    }
+  }
+  const to=$('chg-out-target');
+  if(to){
+    const l=currentLoc(),e=currentEvse(),c=currentConn();
+    to.innerHTML=(l&&e)?`ชาร์จที่ <b>${esc(e.uid)}</b> · ${esc(l.name||l.id)}`+(c?` · หัว ${esc(c.id)} ${Math.round((c.max_electric_power||0)/1000)}kW`:'')
+      :'<span style="color:var(--amber)">ยังไม่ได้เลือกตู้</span>';
+  }
+  const ti=$('chg-in-target'),sel=$('sel-push-evse');
+  if(ti)ti.innerHTML=(sel&&sel.value&&sel.selectedIndex>=0)
+    ? `ชาร์จที่ <b>${esc((sel.options[sel.selectedIndex].text||'').split(' · ')[0])}</b> · ${esc(demoStationName||'สถานี demo')}`
+    : '<span style="color:var(--amber)">partner ยังไม่มีตู้ — ทำ Roaming Location ก่อน</span>';
 }
 function currentConn(){
   const e=currentEvse();if(!e)return null;
@@ -853,6 +885,15 @@ function priceLines(p){
   });
   return out;
 }
+/* "Just arrived" is answered by synced_at, not last_updated: a partner can push an object whose own
+   timestamp is days old, and the tester still needs to spot the row their button press created. */
+function isFresh(ts){
+  if(!ts)return false;
+  const t=Date.parse(ts.length<=19?ts+'+07:00':ts);
+  return isFinite(t)&&Date.now()-t<60000;
+}
+function freshTag(ts){return isFresh(ts)?'<span class="freshtag">เพิ่งเข้ามา</span>':''}
+
 function altTextLines(p){
   const t=(p.tariff_alt_text||[]).map(x=>x.text).filter(Boolean);
   if(!t.length)return '';
@@ -936,10 +977,12 @@ async function refreshPartnerData(){
         }).join('');
         const evseWhen=(evsesByLoc[l.key]||[]).map(e=>e.last_updated).sort().pop();
         const f=changed('loc:'+pt.key+':'+l.key,l.last_updated+evseWhen)?' flash':'';
-        body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
+        const fresh=isFresh(l.synced_at)?' fresh':'';
+        body.push(`<div class="item${f}${fresh}"><div class="top"><span class="name">${esc(p.name||l.key)}${freshTag(l.synced_at)}</span>`+
           `<span class="when">${esc(l.country_code+'/'+l.party_id)} · <button class="ghost" onclick='showJSON("received location",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
           `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
-          `<div class="when" style="margin-top:6px">อัปเดต: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
+          `<div class="when" style="margin-top:6px">อัปเดต: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div>`+
+          (l.synced_at?`<div class="when">📥 รับเข้า: ${esc(ago(l.synced_at))} <span class="mono">${esc(thTime(l.synced_at))}</span></div>`:'')+`</div>`);
       });
       lh.push(pgroupBody(gid,body.join('')));
     });
@@ -960,11 +1003,13 @@ async function refreshPartnerData(){
         const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
         const o=origins[t.key];
         const origin=o?`<div class="when">🏢 ${esc(o.station_name||o.station_id)} · scope <b>${esc(o.scope)}</b></div>`:'';
-        body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
+        const fresh=isFresh(t.synced_at)?' fresh':'';
+        body.push(`<div class="item${f}${fresh}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}${freshTag(t.synced_at)}</span>`+
           `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
           origin+altTextLines(p)+
           priceLines(p).join('')+
-          `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
+          (t.synced_at?`<div class="when">📥 รับเข้า: ${esc(ago(t.synced_at))} <span class="mono">${esc(thTime(t.synced_at))}</span></div>`:'')+
+          `<div class="when mono">${esc(p.id||t.key)}</div></div>`);
       });
       th.push(pgroupBody(gid,body.join('')));
     });
@@ -1065,7 +1110,8 @@ function partnerCacheCards(){
       }).join('');
       const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
       const f=changed('pcl:'+pt.key+':'+l.location_id,when+'|'+(l.synced_at||''))?' flash':'';
-      body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
+      body.push(`<div class="item${f}${isFresh(l.synced_at)?' fresh':''}"><div class="top">`+
+        `<span class="name">${esc(l.name||l.location_id)}${freshTag(l.synced_at)}</span>`+
         `<span class="when mono">${esc(l.location_id)}</span></div>`+
         `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
         `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div>`+

@@ -189,25 +189,29 @@ func (s *Store) DeleteReceivedTariff(ctx context.Context, cc, pid, id string) (b
 }
 
 type ReceivedRow struct {
-	CountryCode string          `json:"country_code"`
-	PartyID     string          `json:"party_id"`
-	Key         string          `json:"key"`
-	Status      string          `json:"status,omitempty"`
+	CountryCode string `json:"country_code"`
+	PartyID     string `json:"party_id"`
+	Key         string `json:"key"`
+	Status      string `json:"status,omitempty"`
+	// LastUpdated is the counterparty's own timestamp; SyncedAt is when this row landed here. A
+	// push replaying an object with an old last_updated still moves SyncedAt, which is what tells
+	// a reader "this is the one that just arrived".
 	Payload     json.RawMessage `json:"payload"`
 	LastUpdated time.Time       `json:"last_updated"`
+	SyncedAt    time.Time       `json:"synced_at"`
 }
 
 func (s *Store) ListReceived(ctx context.Context, kind string) ([]ReceivedRow, error) {
 	var q string
 	switch kind {
 	case "locations":
-		q = `SELECT country_code, party_id, location_id, '' AS status, payload, last_updated FROM received_locations ORDER BY last_updated DESC`
+		q = `SELECT country_code, party_id, location_id, '' AS status, payload, last_updated, synced_at FROM received_locations ORDER BY synced_at DESC`
 	case "evses":
-		q = `SELECT country_code, party_id, location_id || '/' || evse_uid, status, payload, last_updated FROM received_evses ORDER BY last_updated DESC`
+		q = `SELECT country_code, party_id, location_id || '/' || evse_uid, status, payload, last_updated, synced_at FROM received_evses ORDER BY synced_at DESC`
 	case "connectors":
-		q = `SELECT country_code, party_id, location_id || '/' || evse_uid || '/' || connector_id, '' AS status, payload, last_updated FROM received_connectors ORDER BY last_updated DESC`
+		q = `SELECT country_code, party_id, location_id || '/' || evse_uid || '/' || connector_id, '' AS status, payload, last_updated, synced_at FROM received_connectors ORDER BY synced_at DESC`
 	case "tariffs":
-		q = `SELECT country_code, party_id, tariff_id, '' AS status, payload, last_updated FROM received_tariffs ORDER BY last_updated DESC`
+		q = `SELECT country_code, party_id, tariff_id, '' AS status, payload, last_updated, synced_at FROM received_tariffs ORDER BY synced_at DESC`
 	default:
 		return nil, fmt.Errorf("invalid kind %q", kind)
 	}
@@ -219,7 +223,7 @@ func (s *Store) ListReceived(ctx context.Context, kind string) ([]ReceivedRow, e
 	out := []ReceivedRow{}
 	for rows.Next() {
 		var r ReceivedRow
-		if err := rows.Scan(&r.CountryCode, &r.PartyID, &r.Key, &r.Status, &r.Payload, &r.LastUpdated); err != nil {
+		if err := rows.Scan(&r.CountryCode, &r.PartyID, &r.Key, &r.Status, &r.Payload, &r.LastUpdated, &r.SyncedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
