@@ -715,15 +715,14 @@ func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, 
 // fanout key. Every credentials action takes the partner in the body so one flow serves the board.
 func (h *Handlers) adminByPartner(key string) (*MockAdmin, string, bool) {
 	key = strings.ToLower(key)
-	if key == "" || key == "plg" {
-		return h.mock, "PLG", true
+	if key == "" {
+		key = "plg"
 	}
-	for _, p := range h.fanout {
-		if p.Key == key {
-			return p.admin, strings.ToUpper(p.Key), true
-		}
+	p, found := h.fanoutByKey(key)
+	if !found {
+		return nil, "", false
 	}
-	return nil, "", false
+	return p.admin, strings.ToUpper(p.Key), true
 }
 
 // CredentialsPut = the partner rotates its token pair at Evolt via the real PUT /credentials

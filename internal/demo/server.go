@@ -64,6 +64,7 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.POST("/pull/:kind", h.PartnerPull)
 	api.GET("/fanout/state", h.FanoutState)
 	api.POST("/fanout/:partner/handshake", h.FanoutHandshake)
+	api.POST("/fanout/:partner/handshake-partner", h.FanoutPartnerInit)
 	api.POST("/fanout/:partner/unregister", h.FanoutUnregister)
 	api.GET("/evolt/mirror", h.EvoltMirror)
 	api.POST("/evolt/seed", h.InitEvolt)

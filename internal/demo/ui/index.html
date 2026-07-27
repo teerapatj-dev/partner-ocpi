@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OCPI Roaming Demo — PlugSiam ⇄ Evolt</title>
+<title>OCPI Roaming Demo — Evolt ⇄ partner (PLG · VCT · CHX)</title>
 <style>
 :root{--bg:#0f1420;--panel:#171e2e;--panel2:#1d2639;--text:#e6ebf5;--muted:#8b96ad;--line:#2a3550;
 --green:#3ecf8e;--red:#ff6b6b;--amber:#ffb454;--blue:#5aa7ff;--purple:#b78aff;--gray:#6b7688;
@@ -115,8 +115,13 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 .kv:last-child{border-bottom:0}.kv span:first-child{color:var(--muted)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
 .empty{color:var(--muted);font-size:12px;padding:16px 10px;text-align:center;border:1px dashed var(--line);border-radius:7px}
-.pgroup{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--accent,#7dd3fc);margin:12px 0 4px;display:flex;gap:6px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:3px}
+.pgroup{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--accent,#7dd3fc);margin:12px 0 4px;display:flex;gap:6px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:4px;cursor:pointer;user-select:none}
 .pgroup:first-child{margin-top:0}
+.pgroup:hover{filter:brightness(1.25)}
+.pgroup .caret{transition:transform .15s;display:inline-block}
+.pgroup.closed .caret{transform:rotate(-90deg)}
+.pgroup .cnt{margin-left:auto;font-weight:400;color:var(--muted)}
+.pbody.closed{display:none}
 @keyframes flashbg{0%{background:rgba(255,180,84,.55);border-color:var(--amber)}100%{background:var(--bg);border-color:var(--line)}}
 @keyframes flashchip{0%{background:rgba(255,180,84,.65)}100%{background:transparent}}
 .item.flash{animation:flashbg 2.2s ease-out}.chip.flash{animation:flashchip 2.2s ease-out}
@@ -208,42 +213,17 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
   <!-- ===================== HANDSHAKE ===================== -->
   <section class="tabpane on" id="tab-handshake">
     <div class="setup">
-      <span class="t">🌱 <b>ตั้งค่าเริ่มต้น</b> — ถ้า Evolt ยังไม่มีตัวตน OCPI (โดนล้าง) กด seed ก่อน แล้วค่อย handshake</span>
+      <span class="t">🌱 <b>ตั้งค่าเริ่มต้น</b></span>
       <button class="secondary" onclick="runFlow('evolt-seed',this)">🌱 Initialize Evolt (seed 3 ตาราง)</button>
       <button class="danger" onclick="if(confirm('ล้างทะเบียน + ข้อมูลของทุก partner (PLG · VCT · CHX)?\n\n• ลบทะเบียน + เคลียร์ received_* / log แล้ว seed own ใหม่ ทุกเจ้า\n• ลบ row ฝั่ง Evolt ให้ด้วย (handshake ใหม่ได้ทันที)'))runFlow('unregister',this)">ยกเลิกทะเบียน + ล้าง DB ทุก partner</button>
     </div>
-    <div class="subnav">
-      <button class="seg in on" data-d="in" onclick="showDir('handshake','in',this)">🟢 Evolt เริ่ม</button>
-      <button class="seg out" data-d="out" onclick="showDir('handshake','out',this)">🟣 Partner เริ่ม</button>
-    </div>
-    <div class="dirpane" id="handshake-in">
-      <div class="flow in">
-        <h3>Evolt เริ่ม handshake <span class="cardtag">EV-1321</span></h3>
-        <p class="mini">Evolt (orch) เดิน versions→details→credentials เข้าหา PlugSiam · orch อยู่ในคลัสเตอร์ resolve ได้ → ใช้ได้จริงตอนนี้</p>
-        <div class="act"><span class="lbl">Evolt → PlugSiam</span>
-          <button class="in" onclick="runFlow('evolt-init',this)">▶ ให้ Evolt เริ่ม</button></div>
-        <span class="mini mono">Evolt ─(Token A/B/C)→ PlugSiam · จบ = REGISTERED สองฝั่ง</span>
-      </div>
-      <div class="rpanel in"><h3>สถานะทะเบียน <span class="rtag in">ผลลัพธ์</span></h3><div id="res-hs-in"></div></div>
-    </div>
-    <div class="dirpane hidden" id="handshake-out">
-      <div class="flow out">
-        <h3>Partner เริ่ม handshake <span class="cardtag">EV-1321</span></h3>
-        <p class="mini">PlugSiam เดิน GET versions → GET details → POST credentials เข้าหา Evolt</p>
-        <div class="act"><span class="lbl">PlugSiam → Evolt</span>
-          <button class="out" onclick="runFlow('partner-init',this)">Partner เริ่ม</button></div>
-        <span class="mini mono">PlugSiam ─(GET versions/details, POST credentials)→ Evolt · จบ = REGISTERED สองฝั่ง</span>
-      </div>
-      <div class="rpanel out"><h3>สถานะทะเบียน <span class="rtag out">ผลลัพธ์</span></h3><div id="res-hs-out"></div></div>
-    </div>
-    <div class="flow" style="margin-top:14px">
-      <h3>🌐 Fanout partners <span class="cardtag">multi-partner</span></h3>
-      <p class="mini">VoltCity/ChargeX ลงทะเบียนค้างไว้ → ทุก push จาก Evolt (location/status/tariff) จะยิงถึง<b>ทุกเจ้า</b>ที่ REGISTERED · ดูผลที่แท็บ Log (คอลัมน์ partner)</p>
+    <div class="flow">
+      <h3>🤝 ทะเบียน OCPI ต่อ partner <span class="cardtag">EV-1321</span></h3>
+      <p class="mini">ทุกเจ้าเท่ากัน — เลือกได้ว่าใครเริ่ม handshake · 🟢 Evolt เริ่ม = orch เดิน versions→details→credentials เข้าหา partner · 🟣 Partner เริ่ม = partner เดินเข้าหา Evolt เอง</p>
       <div id="fanout-rows"><div class="empty">กำลังโหลด…</div></div>
     </div>
     <div class="flow" style="margin-top:14px">
       <h3>🔁 Credentials PUT / DELETE <span class="cardtag">EV-1714</span></h3>
-      <p class="mini">เส้นจริงตาม OCPI §7.1.2 — partner ยิง <span class="mono">PUT/DELETE /ocpi/2.2.1/credentials</span> (auth Token C) ผ่าน bff→orch→core-auth · <b>ใช้ได้เมื่อ core-auth deploy develop แล้ว</b> ระหว่างนี้จะได้ error จริงจาก Evolt</p>
       <div class="act"><span class="lbl">เลือก partner</span>
         <select id="sel-cred-partner"><option value="plg">PlugSiam</option><option value="vct">VoltCity</option><option value="chx">ChargeX</option></select>
         <button onclick="runFlow('cred-put',this)">🔁 PUT — rotate token</button>
@@ -260,11 +240,10 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
     <div class="dirpane" id="location-in">
       <div class="flow in">
         <h3><span class="rtag in">ROAMING IN</span> Evolt เปิดตู้ให้ partner <span class="cardtag">EV-1560</span></h3>
-        <p class="mini">เราเป็น CPO · ผลไปแผงขวา (DB PlugSiam)</p>
+        <p class="mini">เราเป็น CPO · ผลไปแผงขวา (DB ของแต่ละ partner)</p>
         <div class="flowhead">⬇️ PULL <span class="tagp">partner ดึงจากเรา</span></div>
         <div class="act"><span class="lbl">ดึง locations</span>
-          <button class="in" onclick="runFlow('in-loc-pull',this)">GET 5 รายการ · ทุก partner</button>
-          <button class="in" onclick="runFlow('in-loc-pull-all',this)">⬇ ดึงทั้งหมด (initial sync)</button></div>
+          <button class="in" onclick="runFlow('in-loc-pull-all',this)">⬇ ทุก partner ดึง locations ทั้งหมด</button></div>
         <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner</span></div>
         <div class="act"><span class="lbl">เลือกตู้ (evse)</span>
           <select id="sel-push-evse" title="EVSE ของสถานี demo"></select></div>
@@ -285,8 +264,8 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
             <button class="in" id="btn-kafka" onclick="runFlow('in-loc-push-status',this)">ยิง event</button></div>
         </details>
       </div>
-      <div class="rpanel in"><h3>🟩 ตู้ของ Evolt ที่ PlugSiam ถืออยู่ <span class="rtag in">received_*</span></h3>
-        <p class="mini">คือหน้าจอที่ partner จริงเห็น (party ในข้อมูล = TH/EVT)</p><div id="res-loc-in"></div></div>
+      <div class="rpanel in"><h3>🟩 ตู้ของ Evolt ที่ partner ถืออยู่ <span class="rtag in">received_*</span></h3>
+        <p class="mini">คือสิ่งที่แต่ละ partner ถืออยู่จริง (party ในข้อมูล = TH/EVT)</p><div id="res-loc-in"></div></div>
     </div>
     <div class="dirpane hidden" id="location-out">
       <div class="flow out">
@@ -318,7 +297,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="ghost" id="btn-cron-loc-dry" onclick="runFlow('out-loc-cron-dry',this)">dry-run</button></div>
         <p class="mini" id="cron-loc-hint"></p>
       </div>
-      <div class="rpanel out"><h3>🟪 ตู้ของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">ocpi_partner_*</span></h3>
+      <div class="rpanel out"><h3>🟪 ตู้ของ partner ที่ Evolt เก็บ <span class="rtag out">ocpi_partner_*</span></h3>
         <p class="mini">party ในข้อมูล = TH/PLG · ดูตารางเต็มที่แท็บ Tables</p><div id="res-loc-out"></div></div>
     </div>
   </section>
@@ -343,7 +322,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <div class="act"><span class="lbl">push 1 station</span>
           <select id="sel-station"></select><button class="in" onclick="runFlow('in-trf-push',this)">สั่ง push</button></div>
       </div>
-      <div class="rpanel in"><h3>🟩 ราคาของ Evolt ที่ PlugSiam ถืออยู่ <span class="rtag in">received_tariffs</span></h3>
+      <div class="rpanel in"><h3>🟩 ราคาของ Evolt ที่ partner ถืออยู่ <span class="rtag in">received_tariffs</span></h3>
         <p class="mini">คือราคาที่ partner จริงเห็น</p><div id="res-trf-in"></div></div>
     </div>
     <div class="dirpane hidden" id="tariff-out">
@@ -361,7 +340,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="ghost" id="btn-cron-trf-dry" onclick="runFlow('out-trf-cron-dry',this)">dry-run</button></div>
         <p class="mini" id="cron-trf-hint"></p>
       </div>
-      <div class="rpanel out"><h3>🟪 ราคาของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">อ่านกลับ</span></h3>
+      <div class="rpanel out"><h3>🟪 ราคาของ partner ที่ Evolt เก็บ <span class="rtag out">อ่านกลับ</span></h3>
         <p class="mini">เลือก tariff ด้านซ้ายเพื่ออ่านค่าที่ Evolt เก็บ</p><div id="res-trf-out"></div></div>
     </div>
   </section>
@@ -476,10 +455,6 @@ function showDir(tab,dir,btn){
 const FLOWS={
   'evolt-seed':{title:'Initialize Evolt — seed ตัวตน OCPI (3 ตาราง)',card:'setup',dir:'setup',method:'POST',url:'/api/demo/evolt/seed',
     steps:['เขียน ocpi_credentials (is_self, TH/EVT)','เขียน ocpi_credentials_roles (CPO+EMSP)','เขียน ocpi_endpoints (7 endpoint → bff /api/ocpi)','idempotent — มีอยู่แล้วข้าม (insert 0)']},
-  'evolt-init':{title:'Handshake — ให้ Evolt เริ่ม',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/evolt-init',
-    steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง']},
-  'partner-init':{title:'Handshake — Partner เริ่ม (PlugSiam → Evolt)',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/partner-init',
-    steps:['mock ขอ Token A จาก orch','mock GET Evolt /versions','mock GET version details /2.2.1','mock POST /credentials → Evolt (แลก Token C)','Evolt callback ← mock /versions','ทะเบียน REGISTERED สองฝั่ง']},
   'cred-put':{title:'Credentials — PUT rotate token (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/put',bodyFrom:()=>({partner:val('sel-cred-partner')}),
     steps:['mock ออก token inbound ใหม่ (B\') แล้ว activate ทันที','ยิง PUT /ocpi/2.2.1/credentials (auth Token C เดิม)','Evolt rotate ฝั่งตัวเอง แล้วตอบ Token C ใหม่','mock สลับ outbound เป็น Token C ใหม่ — คู่ token ใหม่ทั้งสองทิศ','พลาดตรงไหน mock rollback token เดิม (ไม่ล็อกตัวเองตาย)']},
   'cred-del':{title:'Credentials — DELETE unregister ตาม spec (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/delete',bodyFrom:()=>({partner:val('sel-cred-partner')}),
@@ -487,8 +462,6 @@ const FLOWS={
   'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB — ทุก partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
     steps:['ลบ registration ใน mock DB (PLG · VCT · CHX)','เคลียร์ received_* + request log ทุกเจ้า','seed own catalog ใหม่ (เริ่มสะอาด)','ลบ row ฝั่ง Evolt ของทุก party (ไม่มี DELETE /credentials ใน spec)']},
 
-  'in-loc-pull':{title:'Roaming In · Location — partner ทุกเจ้าดึง locations ของเรา',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/pull/locations',body:{limit:5},
-    steps:['ทุก partner ที่ REGISTERED ยิง GET /ocpi/cpo/2.2.1/locations พร้อมกัน (token ของใครของมัน)','bff → orch · orch → core-auth verify token','core-ocpi JOIN stations→chargers→evses→connectors → map OCPI','ห่อ envelope + X-Total-Count → partner']},
   'in-loc-push-status':{title:'Roaming In · Location — เรา push สถานะตู้',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/evolt/evse-status-event',bodyFrom:()=>({status:val('sel-kafka-status'),evse_id:val('sel-push-evse')}),
     steps:['จำลองตู้ online + set ocpp_status ที่เลือก (DB)','produce Kafka event evse_status','roaming consumer → fanout','PATCH /ocpi/emsp/2.2.1/locations/{cc}/{pid}/{loc}/{evse} → partner','partner ตอบ 1000']},
   'evolt-tariff-backfill':{title:'Roaming In · Tariff — Backfill (seed evolt_ocpi_tariff)',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/evolt/tariff-backfill',
@@ -792,7 +765,7 @@ function renderHandshake(){
   }else{
     html.push(`<div class="empty">อ่านฝั่ง Evolt ไม่ได้ (ยังไม่ตั้งค่า / offline)</div>`);
   }
-  const out=html.join('');$('res-hs-in').innerHTML=out;$('res-hs-out').innerHTML=out;
+  const out=html.join('');const a=$('res-hs-in'),b=$('res-hs-out');if(a)a.innerHTML=out;if(b)b.innerHTML=out;
 }
 
 // ---- inbound banner ----
@@ -810,8 +783,24 @@ function inboundBanner(){
 }
 
 // ---- IN result panes (partner received_*) ----
-function pgroupHead(pt){
-  return `<div class="pgroup">🟩 ${esc(pt.name||pt.key)} <span class="mono" style="font-weight:400">${esc(pt.key)}</span></div>`;
+/* Collapsible partner sections: the panels repaint on a poll, so open/closed lives here, not in
+   the DOM. gid must be stable per (panel, partner). */
+const pgOpen={};
+function pgToggle(gid,el){
+  pgOpen[gid]=pgOpen[gid]===false;
+  el.classList.toggle('closed',!pgOpen[gid]);
+  const body=el.nextElementSibling;
+  if(body&&body.classList.contains('pbody'))body.classList.toggle('closed',!pgOpen[gid]);
+}
+function pgroupOpen(gid){return pgOpen[gid]!==false}
+function pgroupHead(pt,gid,count){
+  const open=pgroupOpen(gid);
+  return `<div class="pgroup${open?'':' closed'}" onclick="pgToggle('${esc(gid)}',this)">`+
+    `<span class="caret">▾</span> 🟩 ${esc(pt.name||pt.key)} <span class="mono" style="font-weight:400">${esc(pt.key)}</span>`+
+    `<span class="cnt">${count==null?'':esc(String(count))+' รายการ'}</span></div>`;
+}
+function pgroupBody(gid,html){
+  return `<div class="pbody${pgroupOpen(gid)?'':' closed'}">${html}</div>`;
 }
 async function refreshPartnerData(){
   try{
@@ -821,13 +810,15 @@ async function refreshPartnerData(){
     // locations -> res-loc-in : one section per partner
     const lh=[];if(lastInbound)lh.push(inboundBanner());
     ((locs.data||{}).partners||[]).forEach(pt=>{
-      lh.push(pgroupHead(pt));
-      if(pt.error){lh.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+      const gid='in-loc:'+pt.key;
       const d=pt.data||{};
+      const locations=d.locations||[];
+      lh.push(pgroupHead(pt,gid,pt.error?null:locations.length));
+      if(pt.error){lh.push(pgroupBody(gid,`<div class="empty">${esc(pt.error)}</div>`));return}
       const evsesByLoc={};
       (d.evses||[]).forEach(e=>{const loc=(e.key||'').split('/')[0];(evsesByLoc[loc]=evsesByLoc[loc]||[]).push(e)});
-      const locations=d.locations||[];
-      if(!locations.length){lh.push('<div class="empty">ยังไม่มีตู้ของ Evolt ที่นี่ — ทำ Roaming Location (ดึง) ก่อน</div>');return}
+      if(!locations.length){lh.push(pgroupBody(gid,'<div class="empty">ยังไม่มีตู้ของ Evolt ที่นี่ — ทำ Roaming Location (ดึง) ก่อน</div>'));return}
+      const body=[];
       locations.forEach(l=>{
         const p=asObj(l.payload);
         const chips=(evsesByLoc[l.key]||[]).map(e=>{
@@ -836,33 +827,37 @@ async function refreshPartnerData(){
         }).join('');
         const evseWhen=(evsesByLoc[l.key]||[]).map(e=>e.last_updated).sort().pop();
         const f=changed('loc:'+pt.key+':'+l.key,l.last_updated+evseWhen)?' flash':'';
-        lh.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
+        body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(p.name||l.key)}</span>`+
           `<span class="when">${esc(l.country_code+'/'+l.party_id)} · <button class="ghost" onclick='showJSON("received location",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
           `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
           `<div class="when" style="margin-top:6px">อัปเดต: ${esc(ago(evseWhen||l.last_updated))} <span class="mono">${esc(thTime(evseWhen||l.last_updated))}</span></div></div>`);
       });
+      lh.push(pgroupBody(gid,body.join('')));
     });
     if(!lh.length)lh.push('<div class="empty">ยังไม่มีข้อมูล</div>');
     $('res-loc-in').innerHTML=lh.join('');
     // tariffs -> res-trf-in : one section per partner
     const th=[];
     ((trfs.data||{}).partners||[]).forEach(pt=>{
-      th.push(pgroupHead(pt));
-      if(pt.error){th.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+      const gid='in-trf:'+pt.key;
       const d=pt.data||{};
       const tariffs=d.tariffs||[];const origins=d.origins||{};
-      if(!tariffs.length){th.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (push/ดึง)</div>');return}
+      th.push(pgroupHead(pt,gid,pt.error?null:tariffs.length));
+      if(pt.error){th.push(pgroupBody(gid,`<div class="empty">${esc(pt.error)}</div>`));return}
+      if(!tariffs.length){th.push(pgroupBody(gid,'<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (push/ดึง)</div>'));return}
+      const body=[];
       tariffs.forEach(t=>{
         const p=asObj(t.payload),f=changed('rtrf:'+pt.key+':'+t.key,JSON.stringify(p.elements||[])+t.last_updated)?' flash':'';
         const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
         const o=origins[t.key];
         const origin=o?`<div class="when">🏢 ${esc(o.station_name||o.station_id)} · scope <b>${esc(o.scope)}</b></div>`:'';
-        th.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
+        body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
           `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
           origin+
           priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
           `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
       });
+      th.push(pgroupBody(gid,body.join('')));
     });
     if(!th.length)th.push('<div class="empty">ยังไม่มีข้อมูล</div>');
     $('res-trf-in').innerHTML=th.join('');
@@ -882,7 +877,7 @@ async function refreshMirror(){
     // locations out
     const lh=[];
     const wl=(d.locations||{}).date_from,fl=changed('wm:locations',String(wl))?' flash':'';
-    lh.push(`<div class="item${fl}"><div class="top"><span class="name">🔌 Locations ของ PlugSiam <span class="cardtag">EV-1561</span></span>`+
+    lh.push(`<div class="item${fl}"><div class="top"><span class="name">🔌 watermark ของ PlugSiam <span class="cardtag">EV-1561</span></span>`+
       `<span class="when">${wl?esc(ago(wl)):'—'}</span></div>`+
       `<div class="when">${wl?'ข้อมูลล่าสุด: <span class="mono">'+esc(thTime(wl))+'</span>':'ยังไม่มี — กด Roaming Out · Location'}</div></div>`);
     (d.notes||[]).forEach(n=>lh.push(`<div class="note">⚠️ ${esc(n)}</div>`));
@@ -890,7 +885,7 @@ async function refreshMirror(){
     $('res-loc-out').innerHTML=lh.join('');
     // tariff out
     const th=[];const wt=(d.tariffs||{}).date_from,ft=changed('wm:tariffs',String(wt))?' flash':'';
-    th.push(`<div class="item${ft}"><div class="top"><span class="name">💰 Tariffs ของ PlugSiam <span class="cardtag">EV-1585</span></span>`+
+    th.push(`<div class="item${ft}"><div class="top"><span class="name">💰 watermark ของ PlugSiam <span class="cardtag">EV-1585</span></span>`+
       `<span class="when">${wt?esc(ago(wt)):'—'}</span></div>`+
       `<div class="when">${wt?'ข้อมูลล่าสุด: <span class="mono">'+esc(thTime(wt))+'</span>':'ยังไม่มี — กด Roaming Out · Tariff'}</div></div>`);
     if(d.tariff){
@@ -922,22 +917,25 @@ async function refreshPartnerCache(){
 function partnerTariffCards(){
   const out=[];
   partnerCacheParts.forEach(pt=>{
-    out.push(pgroupHead(pt));
-    if(pt.error){out.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+    const gid='out-trf:'+pt.key;
     const rows=pt.tariffs||[];
-    if(!rows.length){out.push('<div class="empty">Evolt ยังไม่มีราคาของ '+esc(pt.name||pt.key)+'<br>กด PUT (upsert) หรือ tariffs_pull</div>');return}
+    out.push(pgroupHead(pt,gid,pt.error?null:rows.length));
+    if(pt.error){out.push(pgroupBody(gid,`<div class="empty">${esc(pt.error)}</div>`));return}
+    if(!rows.length){out.push(pgroupBody(gid,'<div class="empty">Evolt ยังไม่มีราคาของ '+esc(pt.name||pt.key)+'<br>กด PUT (upsert) หรือ tariffs_pull</div>'));return}
+    const body=[];
     rows.forEach(t=>{
       const p=asObj(t.raw);
       const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
       const f=changed('pct:'+pt.key+':'+t.tariff_id,t.synced_at+(t.deleted_at||''))?' flash':'';
       const del=t.deleted_at?`<span class="chip st-REMOVED"><b>ลบแล้ว</b><span class="uid">${esc(t.deleted_at)}</span></span>`:'';
-      out.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||t.tariff_id)}</span>`+
+      body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||t.tariff_id)}</span>`+
         `<span class="when"><button class="ghost" onclick='showJSON("evolt cached partner tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
         (del?`<div class="chips">${del}</div>`:'')+
         priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
         `<div class="when" style="margin-top:6px">รับเข้า: ${esc(ago(t.synced_at))} <span class="mono">${esc(thTime(t.synced_at))}</span></div>`+
         `<div class="when mono">${esc(t.tariff_id)}</div></div>`);
     });
+    out.push(pgroupBody(gid,body.join('')));
   });
   if(!out.length)out.push('<div class="empty">Evolt ยังไม่มีราคาของ partner<br>กด PUT (upsert) หรือ tariffs_pull</div>');
   return out;
@@ -945,10 +943,12 @@ function partnerTariffCards(){
 function partnerCacheCards(){
   const out=[];
   partnerCacheParts.forEach(pt=>{
-    out.push(pgroupHead(pt));
-    if(pt.error){out.push(`<div class="empty">${esc(pt.error)}</div>`);return}
+    const gid='out-loc:'+pt.key;
     const rows=pt.locations||[];
-    if(!rows.length){out.push('<div class="empty">Evolt ยังไม่มีตู้ของ '+esc(pt.name||pt.key)+'<br>กด PUT / PATCH หรือ locations_pull</div>');return}
+    out.push(pgroupHead(pt,gid,pt.error?null:rows.length));
+    if(pt.error){out.push(pgroupBody(gid,`<div class="empty">${esc(pt.error)}</div>`));return}
+    if(!rows.length){out.push(pgroupBody(gid,'<div class="empty">Evolt ยังไม่มีตู้ของ '+esc(pt.name||pt.key)+'<br>กด PUT / PATCH หรือ locations_pull</div>'));return}
+    const body=[];
     rows.forEach(l=>{
       const chips=(l.evses||[]).map(e=>{
         const st=e.status||'UNKNOWN',f=changed('pc:'+pt.key+':'+l.location_id+'/'+e.uid,st+'|'+e.last_updated)?' flash':'';
@@ -956,11 +956,12 @@ function partnerCacheCards(){
       }).join('');
       const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
       const f=changed('pcl:'+pt.key+':'+l.location_id,when)?' flash':'';
-      out.push(`<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
+      body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(l.name||l.location_id)}</span>`+
         `<span class="when mono">${esc(l.location_id)}</span></div>`+
         `<div class="chips">${chips||'<span class="when">— ยังไม่มีหัวชาร์จ —</span>'}</div>`+
         `<div class="when" style="margin-top:6px">${esc(l.city||'')} · อัปเดต: ${esc(ago(when))} <span class="mono">${esc(thTime(when))}</span></div></div>`);
     });
+    out.push(pgroupBody(gid,body.join('')));
   });
   if(!out.length)out.push('<div class="empty">Evolt ยังไม่มีตู้ของ partner<br>กด PUT / PATCH หรือ locations_pull</div>');
   return out;
@@ -972,14 +973,15 @@ async function refreshFanout(){
   try{
     const r=await api('/api/demo/fanout/state');const j=await r.json();
     if(!j.ok){box.innerHTML='<div class="empty">'+esc(j.error||'โหลดไม่ได้')+'</div>';return}
-    if(!(j.data||[]).length){box.innerHTML='<div class="empty">ไม่ได้ตั้งค่า MOCK_VCT_URL / MOCK_CHX_URL</div>';return}
+    if(!(j.data||[]).length){box.innerHTML='<div class="empty">ไม่มี partner ที่ตั้งค่าไว้</div>';return}
     box.innerHTML=j.data.map(p=>{
       if(!p.reachable)return `<div class="act"><span class="lbl mono">${esc(p.key)}</span><span class="mini">mock ไม่ตอบ</span></div>`;
       const both=p.mock_status==='REGISTERED'&&p.evolt_registered;
       const badge=both?'<span class="chip st-AVAILABLE"><b>REGISTERED</b></span>'
         :`<span class="chip st-UNKNOWN"><b>${esc(p.mock_status||'ยังไม่ลงทะเบียน')}</b><span class="uid">evolt:${p.evolt_registered?'✓':'✗'}</span></span>`;
       return `<div class="act"><span class="lbl">${esc(p.name)} <span class="mono">${esc(p.party)}</span></span>${badge}`+
-        `<button class="in" onclick="fanoutAct('${esc(p.key)}','handshake',this)">🤝 Handshake</button>`+
+        `<button class="in" onclick="fanoutAct('${esc(p.key)}','handshake',this)">🟢 Evolt เริ่ม</button>`+
+        `<button class="out" onclick="fanoutAct('${esc(p.key)}','handshake-partner',this)">🟣 Partner เริ่ม</button>`+
         `<button class="ghost" onclick="if(confirm('ยกเลิกทะเบียน ${esc(p.name)} + ล้างข้อมูลฝั่ง partner?'))fanoutAct('${esc(p.key)}','unregister',this)">ยกเลิก</button></div>`;
     }).join('');
   }catch(e){}

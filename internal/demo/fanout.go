@@ -8,12 +8,16 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// The fanout partners (VoltCity/ChargeX) exist to be pushed at: once registered they stay in the
-// background and every Evolt push shows up N times in the log. Only registration is driven from
-// here — the interactive flows all stay on the main partner.
+// Every partner on the board is equal: PLG is simply the first row, with the same handshake,
+// partner-init and unregister actions as the fanout ones. allPartners keeps that order stable.
+
+func (h *Handlers) allPartners() []fanoutPartner {
+	out := []fanoutPartner{{FanoutMock: FanoutMock{Key: "plg", PathPrefix: ""}, admin: h.mock}}
+	return append(out, h.fanout...)
+}
 
 func (h *Handlers) fanoutByKey(key string) (fanoutPartner, bool) {
-	for _, p := range h.fanout {
+	for _, p := range h.allPartners() {
 		if p.Key == key {
 			return p, true
 		}
@@ -21,13 +25,13 @@ func (h *Handlers) fanoutByKey(key string) (fanoutPartner, bool) {
 	return fanoutPartner{}, false
 }
 
-// FanoutState answers one row per fanout partner: who it is, what its mock thinks, and whether
-// Evolt actually holds a registration for it — the two can disagree, and that disagreement is
-// exactly what the badge should show.
+// FanoutState answers one row per partner: who it is, what its mock thinks, and whether Evolt
+// actually holds a registration for it — the two can disagree, and that disagreement is exactly
+// what the badge should show.
 func (h *Handlers) FanoutState(c echo.Context) error {
 	ctx := c.Request().Context()
 	out := []map[string]any{}
-	for _, p := range h.fanout {
+	for _, p := range h.allPartners() {
 		row := map[string]any{"key": p.Key}
 		raw, err := p.admin.Get(ctx, "/admin/state")
 		if err != nil {
@@ -65,8 +69,8 @@ func (h *Handlers) FanoutState(c echo.Context) error {
 	return ok(c, out)
 }
 
-// FanoutHandshake registers one fanout partner the same way the main evolt-init flow does: that
-// mock issues Token A, Evolt walks the handshake against its public path prefix.
+// FanoutHandshake registers one partner Evolt-initiated: that mock issues Token A, Evolt walks the
+// handshake against the partner's public path prefix.
 func (h *Handlers) FanoutHandshake(c echo.Context) error {
 	p, found := h.fanoutByKey(c.Param("partner"))
 	if !found {
@@ -98,8 +102,37 @@ func (h *Handlers) FanoutHandshake(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
-// FanoutUnregister mirrors the main Unregister: wipe the mock side, then clear Evolt's row for that
-// party (no DELETE /credentials exists, and a leftover REGISTERED row blocks re-handshake with 9999).
+// FanoutPartnerInit is the opposite direction for any partner: orch hands out Token A for it, then
+// that mock walks versions → details → credentials against Evolt itself.
+func (h *Handlers) FanoutPartnerInit(c echo.Context) error {
+	p, found := h.fanoutByKey(c.Param("partner"))
+	if !found {
+		return fail(c, http.StatusBadRequest, "unknown fanout partner", nil)
+	}
+	ctx := c.Request().Context()
+	if h.cfg.EvoltVersionsURL == "" {
+		return fail(c, http.StatusBadGateway, errNotConfigured.Error(), nil)
+	}
+	partnerName, err := partnerNameOf(ctx, p.admin)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	tokenA, err := h.evolt.PartnerInitial(ctx, partnerName)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	result, err := p.admin.Post(ctx, "/admin/handshake", map[string]string{
+		"evolt_versions_url": h.cfg.EvoltVersionsURL,
+		"token_a":            tokenA,
+	})
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, json.RawMessage(result))
+}
+
+// FanoutUnregister mirrors the main Unregister for a single partner: wipe the mock side, then clear
+// Evolt's row for that party (a leftover REGISTERED row blocks re-handshake with 9999).
 func (h *Handlers) FanoutUnregister(c echo.Context) error {
 	p, found := h.fanoutByKey(c.Param("partner"))
 	if !found {
