@@ -514,6 +514,91 @@ func (c *Client) PushEvseStatus(ctx context.Context, locationID, evseUID, status
 	return c.pushObject(ctx, http.MethodPatch, "locations", "/"+locationID+"/"+evseUID, body)
 }
 
+// PushLocationLevel covers the whole Locations receiver surface (OCPI §8.2): three object levels —
+// location, EVSE, connector — each with PUT (the full object) and PATCH (only the changed fields).
+// mutate is applied to the mock's own copy first, so a PUT sends what the CPO now holds and a PATCH
+// sends exactly what changed; the two sides never drift.
+func (c *Client) PushLocationLevel(ctx context.Context, method, level, locationID, evseUID, connectorID string, mutate map[string]any) (PushResult, error) {
+	raw, err := c.st.GetOwn(ctx, "own_locations", locationID)
+	if err != nil {
+		return PushResult{}, fmt.Errorf("load location %s: %w", locationID, err)
+	}
+	var loc map[string]any
+	if err := json.Unmarshal(raw, &loc); err != nil {
+		return PushResult{}, fmt.Errorf("stored location unreadable: %w", err)
+	}
+
+	now := ocpi.Now()
+	target, suffix, err := locateLevel(loc, level, locationID, evseUID, connectorID)
+	if err != nil {
+		return PushResult{}, err
+	}
+	for k, v := range mutate {
+		target[k] = v
+	}
+	if len(mutate) > 0 {
+		target["last_updated"] = now
+		// A change anywhere inside a Location bumps the Location's own last_updated too — that is
+		// the field the counterparty's pull watermark keys on.
+		loc["last_updated"] = now
+		updated, err := json.Marshal(loc)
+		if err != nil {
+			return PushResult{}, err
+		}
+		ts, err := time.Parse(time.RFC3339, now)
+		if err != nil {
+			ts = time.Now().UTC()
+		}
+		source, err := c.st.GetOwnSource(ctx, "own_locations", locationID)
+		if err != nil {
+			return PushResult{}, fmt.Errorf("read location source: %w", err)
+		}
+		if err := c.st.UpsertOwn(ctx, "own_locations", locationID, updated, ts, source); err != nil {
+			return PushResult{}, fmt.Errorf("persist mutated location: %w", err)
+		}
+	}
+
+	body := any(target)
+	if method == http.MethodPatch {
+		patch := map[string]any{"last_updated": now}
+		for k, v := range mutate {
+			patch[k] = v
+		}
+		body = patch
+	}
+	return c.pushObject(ctx, method, "locations", suffix, body)
+}
+
+// locateLevel returns the sub-object a push addresses plus the URL suffix under
+// /locations/{country}/{party}. Levels mirror the OCPI object hierarchy exactly.
+func locateLevel(loc map[string]any, level, locationID, evseUID, connectorID string) (map[string]any, string, error) {
+	switch level {
+	case "location":
+		return loc, "/" + locationID, nil
+	case "evse", "connector":
+		evses, _ := loc["evses"].([]any)
+		for _, e := range evses {
+			evse, _ := e.(map[string]any)
+			if evse == nil || evse["uid"] != evseUID {
+				continue
+			}
+			if level == "evse" {
+				return evse, "/" + locationID + "/" + evseUID, nil
+			}
+			conns, _ := evse["connectors"].([]any)
+			for _, cn := range conns {
+				conn, _ := cn.(map[string]any)
+				if conn != nil && conn["id"] == connectorID {
+					return conn, "/" + locationID + "/" + evseUID + "/" + connectorID, nil
+				}
+			}
+			return nil, "", fmt.Errorf("connector %s not found on evse %s", connectorID, evseUID)
+		}
+		return nil, "", fmt.Errorf("evse %s not found on location %s", evseUID, locationID)
+	}
+	return nil, "", fmt.Errorf("level must be location, evse or connector")
+}
+
 func (c *Client) PushTariff(ctx context.Context, tariffID string, payload json.RawMessage) (PushResult, error) {
 	return c.pushObject(ctx, http.MethodPut, "tariffs", "/"+tariffID, payload)
 }

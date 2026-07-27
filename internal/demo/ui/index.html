@@ -277,9 +277,19 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <h3><span class="rtag out">ROAMING OUT</span> Evolt รับตู้ partner <span class="cardtag">EV-1561</span></h3>
         <p class="mini">เราเป็น eMSP → <span class="mono">ocpi_partner_*</span> · ผลไปแผงขวา (DB Evolt)</p>
         <div class="flowhead">⬆️ PUSH <span class="tagp">partner ยัดเข้ามา</span></div>
-        <div class="act"><span class="lbl">push location</span>
-          <select id="sel-location"></select><button class="out" onclick="runFlow('out-loc-push',this)">PUT</button></div>
-        <div class="act"><span class="lbl">เลือกตู้ (evse)</span><select id="sel-evse"></select></div>
+        <p class="mini">OCPI มี 3 ระดับวัตถุ — Location / EVSE / Connector · <b>PUT</b> = ส่งทั้งก้อน (สร้างหรือแทนที่) · <b>PATCH</b> = ส่งเฉพาะฟิลด์ที่เปลี่ยน</p>
+        <div class="act"><span class="lbl">1️⃣ Location</span>
+          <select id="sel-location"></select>
+          <button class="out" onclick="runFlow('out-loc-put',this)">PUT ทั้งก้อน</button>
+          <button class="out" onclick="runFlow('out-loc-patch',this)">PATCH เปลี่ยนชื่อ</button></div>
+        <div class="act"><span class="lbl">2️⃣ EVSE</span>
+          <select id="sel-evse"></select>
+          <button class="out" onclick="runFlow('out-evse-put',this)">PUT ทั้งก้อน</button></div>
+        <div class="act"><span class="lbl">3️⃣ Connector</span>
+          <select id="sel-connector"></select>
+          <button class="out" onclick="runFlow('out-conn-put',this)">PUT ทั้งก้อน</button>
+          <button class="out" onclick="runFlow('out-conn-patch',this)">PATCH ลด/คืนกำลังไฟ</button></div>
+        <p class="mini">PATCH EVSE = การเปลี่ยนสถานะด้านล่าง (ที่ CPO ยิงบ่อยที่สุด)</p>
         <div class="charger out" id="chg-out">
           <div class="chgtop"><span class="chgstate" id="chg-out-state">AVAILABLE</span>
             <span class="chgmeter" id="chg-out-meter">พร้อมใช้งาน</span></div>
@@ -290,7 +300,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           </div>
           <ol class="chgsteps" id="chg-out-steps"></ol>
         </div>
-        <p class="mini">partner เป็น CPO ส่ง <span class="mono">OCPI Status</span> ตรงๆ — spec ไม่มี PREPARING/FINISHING เลยมีแค่ AVAILABLE ⇄ CHARGING</p>
+        <p class="mini">partner เป็น CPO ส่ง <span class="mono">OCPI Status</span> ตรงๆ — spec ไม่มี PREPARING/FINISHING · ช่วง "เสียบแล้วยังไม่จ่ายไฟ / ชาร์จจบแต่รถยังจอด" OCPI ใช้ <b>BLOCKED</b> (หัวชาร์จถูกกีดขวางทางกายภาพ)</p>
         <details class="adv"><summary>ส่งสถานะเดี่ยว (เคสขอบ เช่น OUTOFORDER)</summary>
           <div class="act"><span class="lbl">push สถานะ</span>
             <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
@@ -478,8 +488,20 @@ const FLOWS={
   'in-trf-push':{title:'Roaming In · Tariff — เรา push tariff (fanout)',card:'EV-1584',dir:'in',method:'POST',url:'/api/demo/evolt/tariff-push',bodyFrom:()=>({station_id:val('sel-station')}),
     steps:['station เปลี่ยนราคา → materialize + fanout (เส้นเดียวกับ consumer จริง)','PUT /ocpi/emsp/2.2.1/tariffs/{cc}/{pid}/{id} → partner','partner ตอบ 1000']},
 
-  'out-loc-push':{title:'Roaming Out · Location — partner push location เข้ามา',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/location',bodyFrom:()=>({location_id:val('sel-location')}),
+  'out-loc-put':{title:'Roaming Out · Location — PUT ทั้งก้อน (partner → Evolt)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/location',bodyFrom:()=>({location_id:val('sel-location')}),
     steps:['partner ยิง PUT /ocpi/emsp/2.2.1/locations/{cc}/{pid}/{loc} (token-in)','bff → orch → core-auth verify','orch route by URL depth → core-ocpi เขียน ocpi_partner_locations','ตอบ 1000']},
+  'out-loc-patch':{title:'Roaming Out · Location — PATCH เฉพาะฟิลด์ที่เปลี่ยน',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
+    bodyFrom:()=>({method:'PATCH',level:'location',location_id:val('sel-location'),mutate:{name:nextLocName()}}),
+    steps:['partner แก้ชื่อสถานีในระบบตัวเอง','ยิง PATCH .../locations/{cc}/{party}/{loc} (เฉพาะ name + last_updated)','orch route ตามความลึก URL → core-ocpi merge ทับของเดิม','ตอบ 1000 — ฟิลด์อื่นไม่ถูกแตะ']},
+  'out-evse-put':{title:'Roaming Out · EVSE — PUT ทั้งก้อน',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
+    bodyFrom:()=>({method:'PUT',level:'evse',location_id:val('sel-location'),evse_uid:val('sel-evse')}),
+    steps:['partner ส่ง EVSE object เต็ม (พร้อม connectors)','PUT .../locations/{cc}/{party}/{loc}/{evse_uid}','core-ocpi upsert แถว evse + connectors ใต้มัน','ตอบ 1000']},
+  'out-conn-put':{title:'Roaming Out · Connector — PUT ทั้งก้อน',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
+    bodyFrom:()=>({method:'PUT',level:'connector',location_id:val('sel-location'),evse_uid:val('sel-evse'),connector_id:val('sel-connector')}),
+    steps:['partner ส่ง Connector object เต็ม','PUT .../locations/{cc}/{party}/{loc}/{evse_uid}/{conn_id}','core-ocpi upsert แถว connector เดียว','ตอบ 1000']},
+  'out-conn-patch':{title:'Roaming Out · Connector — PATCH ลด/คืนกำลังไฟ',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
+    bodyFrom:()=>({method:'PATCH',level:'connector',location_id:val('sel-location'),evse_uid:val('sel-evse'),connector_id:val('sel-connector'),mutate:{max_electric_power:nextConnPower()}}),
+    steps:['หม้อแปลงจำกัดโหลด → partner ลดกำลังไฟหัวนี้','ยิง PATCH .../{loc}/{evse_uid}/{conn_id} (เฉพาะ max_electric_power)','core-ocpi merge ทับเฉพาะฟิลด์นั้น','ตอบ 1000 — กดซ้ำเพื่อคืนค่าเดิม']},
   'out-loc-push-status':{title:'Roaming Out · Location — partner push สถานะตู้',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/evse-status',bodyFrom:()=>({evse_uid:val('sel-evse'),status:val('sel-evse-status')}),
     steps:['partner ยิง PATCH .../locations/{loc}/{evse_uid} (token-in)','orch route → core-ocpi เขียน ocpi_partner_evses (partial)','ตอบ 1000']},
   'out-trf-push':{title:'Roaming Out · Tariff — partner push tariff เข้ามา',card:'EV-1585',dir:'out',method:'POST',url:'/api/demo/push/tariff',bodyFrom:()=>({tariff_id:val('sel-tariff')}),
@@ -560,8 +582,10 @@ const CHARGERS={
   out:{
     kW:60, endpoint:'/api/demo/push/evse-status',
     body:s=>({evse_uid:val('sel-evse'),status:s}),
-    start:[{s:'CHARGING',t:'partner PATCH → CHARGING'}],
-    stop:[{s:'AVAILABLE',t:'partner PATCH → AVAILABLE (OCPI ไม่มี FINISHING)'}]},
+    start:[{s:'BLOCKED',t:'รถจอด+เสียบสาย ยังไม่จ่ายไฟ → BLOCKED'},
+           {s:'CHARGING',t:'เริ่มจ่ายไฟ → CHARGING'}],
+    stop:[{s:'BLOCKED',t:'ชาร์จจบ รถยังจอดคาหัว → BLOCKED'},
+          {s:'AVAILABLE',t:'ถอดสาย+ถอยรถ → AVAILABLE'}]},
 };
 const chgState={in:{charging:false,busy:false,timer:null,t0:0},out:{charging:false,busy:false,timer:null,t0:0}};
 
@@ -733,13 +757,37 @@ async function refreshOwn(){
       api('/api/demo/own/locations?source=base').then(r=>r.json()),
       api('/api/demo/own/tariffs?source=base').then(r=>r.json())]);
     if(locs.ok){
-      const sl=$('sel-location'),se=$('sel-evse');const kl=sl.value,ke=se.value;sl.innerHTML='';se.innerHTML='';
-      (locs.data||[]).forEach(l=>{sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
-        (l.evses||[]).forEach(e=>se.add(new Option(`${e.uid} · ${e.status||'—'} (${l.id})`,e.uid)));});
-      if(kl)sl.value=kl;if(ke)se.value=ke;
+      ownLocs=locs.data||[];
+      const sl=$('sel-location'),se=$('sel-evse'),sc=$('sel-connector');
+      const kl=sl.value,ke=se.value,kc=sc?sc.value:'';
+      sl.innerHTML='';se.innerHTML='';if(sc)sc.innerHTML='';
+      ownLocs.forEach(l=>{sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
+        (l.evses||[]).forEach(e=>{se.add(new Option(`${e.uid} · ${e.status||'—'} (${l.id})`,e.uid));
+          if(sc)(e.connectors||[]).forEach(cn=>sc.add(new Option(
+            `${cn.id} · ${cn.standard||''} ${Math.round((cn.max_electric_power||0)/1000)}kW (${e.uid})`,cn.id)));});});
+      if(kl)sl.value=kl;if(ke)se.value=ke;if(kc&&sc)sc.value=kc;
     }
     if(trfs.ok){const st=$('sel-tariff'),keep=st.value;st.innerHTML='';(trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));if(keep)st.value=keep;}
   }catch(e){}
+}
+
+/* The PATCH buttons must send a real change, so the new value is derived from what the partner
+   currently holds (loaded with the pickers) rather than a constant that could already be in place. */
+let ownLocs=[];
+function currentLoc(){return ownLocs.find(l=>l.id===val('sel-location'))||null}
+function currentConn(){
+  const l=currentLoc();if(!l)return null;
+  const e=(l.evses||[]).find(x=>x.uid===val('sel-evse'));if(!e)return null;
+  return (e.connectors||[]).find(c=>c.id===val('sel-connector'))||null;
+}
+function nextLocName(){
+  const l=currentLoc();const base=((l&&l.name)||'Station').replace(/ · ปรับปรุง.*$/,'');
+  const t=new Date();
+  return `${base} · ปรับปรุง ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+}
+function nextConnPower(){
+  const c=currentConn();const now=(c&&c.max_electric_power)||22000;
+  return now>11000?11000:22000; // สลับ ลดโหลด ⇄ คืนค่าเต็ม
 }
 
 const prevSig=new Map();
@@ -783,7 +831,6 @@ function priceLines(p){
       `${pc.step_size!=null?' · step '+pc.step_size:''}${pc.vat!=null?' · VAT '+pc.vat+'%':''}</small></div>`).join('');
     out.push(`<div class="el">${head}${prices}</div>`);
   });
-  if(els.length>1)out.push('<div class="elnote">อ่านบนลงล่าง — element แรกที่เงื่อนไขตรงคือราคาที่ใช้ (Evolt เรียง DEAL → PROMO → ALT → BASE, เจาะจงมากอยู่บน, ไม่มีเงื่อนไขอยู่ล่างสุด)</div>');
   return out;
 }
 function altTextLines(p){

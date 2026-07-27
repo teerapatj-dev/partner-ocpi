@@ -301,6 +301,27 @@ func (h *Handlers) PushLocation(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
+// PushObject drives one of the six Locations receiver calls (location/evse/connector × PUT/PATCH).
+// The demo builds the mutation client-side so each button says exactly what it changes.
+func (h *Handlers) PushObject(c echo.Context) error {
+	var req struct {
+		Method      string         `json:"method"`
+		Level       string         `json:"level"`
+		LocationID  string         `json:"location_id"`
+		EvseUID     string         `json:"evse_uid"`
+		ConnectorID string         `json:"connector_id"`
+		Mutate      map[string]any `json:"mutate"`
+	}
+	if err := c.Bind(&req); err != nil || req.LocationID == "" {
+		return fail(c, http.StatusBadRequest, "location_id is required", nil)
+	}
+	result, err := h.mock.Post(c.Request().Context(), "/admin/push/object", req)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, json.RawMessage(result))
+}
+
 func (h *Handlers) PushEvseStatus(c echo.Context) error {
 	var req struct {
 		EvseUID string `json:"evse_uid"`

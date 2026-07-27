@@ -112,6 +112,39 @@ func (h *Handlers) AdminPushEvseStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+// pushObjectRequest drives any of the six Locations receiver calls: three object levels × PUT/PATCH.
+type pushObjectRequest struct {
+	Method      string         `json:"method"` // PUT | PATCH
+	Level       string         `json:"level"`  // location | evse | connector
+	LocationID  string         `json:"location_id"`
+	EvseUID     string         `json:"evse_uid"`
+	ConnectorID string         `json:"connector_id"`
+	Mutate      map[string]any `json:"mutate"` // fields to change; PATCH sends exactly these
+}
+
+func (h *Handlers) AdminPushObject(c echo.Context) error {
+	var req pushObjectRequest
+	if err := c.Bind(&req); err != nil || req.LocationID == "" {
+		return adminErr(c, http.StatusBadRequest, "location_id is required")
+	}
+	method := strings.ToUpper(req.Method)
+	if method != http.MethodPut && method != http.MethodPatch {
+		return adminErr(c, http.StatusBadRequest, "method must be PUT or PATCH")
+	}
+	if req.Level != "location" && req.Level != "evse" && req.Level != "connector" {
+		return adminErr(c, http.StatusBadRequest, "level must be location, evse or connector")
+	}
+	if method == http.MethodPatch && len(req.Mutate) == 0 {
+		return adminErr(c, http.StatusBadRequest, "PATCH needs at least one field in mutate")
+	}
+	result, err := h.cl.PushLocationLevel(c.Request().Context(), method, req.Level,
+		req.LocationID, req.EvseUID, req.ConnectorID, req.Mutate)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": result})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
 type pushTariffRequest struct {
 	TariffID string `json:"tariff_id"`
 }

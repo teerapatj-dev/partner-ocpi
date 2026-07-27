@@ -58,6 +58,7 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.POST("/credentials/delete", h.CredentialsDelete)
 	api.POST("/requests/clear", h.ClearRequests)
 	api.POST("/push/location", h.PushLocation)
+	api.POST("/push/object", h.PushObject)
 	api.POST("/push/evse-status", h.PushEvseStatus)
 	api.POST("/push/tariff", h.PushTariff)
 	api.DELETE("/push/tariff/:tariff_id", h.DeleteTariffPush)

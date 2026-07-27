@@ -64,6 +64,20 @@ func (s *Store) GetOwn(ctx context.Context, table, id string) (json.RawMessage, 
 	return p, err
 }
 
+// GetOwnSource reads which seed batch a row belongs to, so a rewrite can keep it there — an upsert
+// that defaults the source would silently move a cron-batch object into the hand-picked one.
+func (s *Store) GetOwnSource(ctx context.Context, table, id string) (string, error) {
+	if table != "own_locations" && table != "own_tariffs" {
+		return "", fmt.Errorf("invalid table %q", table)
+	}
+	var src string
+	err := s.pool.QueryRow(ctx, `SELECT source FROM `+table+` WHERE id=$1`, id).Scan(&src)
+	if isNoRows(err) {
+		return "", ErrNotFound
+	}
+	return src, err
+}
+
 func (s *Store) UpsertOwn(ctx context.Context, table, id string, payload json.RawMessage, lastUpdated time.Time, source string) error {
 	if table != "own_locations" && table != "own_tariffs" {
 		return fmt.Errorf("invalid table %q", table)

@@ -74,6 +74,7 @@ func New(cfg config.Config, st *store.Store, cl *client.Client) *echo.Echo {
 	admin.DELETE("/handshake", h.AdminCredentialsDelete)
 	admin.GET("/tokens/current", h.AdminCurrentTokens)
 	admin.POST("/push/location", h.AdminPushLocation)
+	admin.POST("/push/object", h.AdminPushObject)
 	admin.POST("/push/evse-status", h.AdminPushEvseStatus)
 	admin.POST("/push/tariff", h.AdminPushTariff)
 	admin.DELETE("/push/tariff/:tariff_id", h.AdminDeleteTariffPush)
