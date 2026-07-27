@@ -610,6 +610,46 @@ func TestUnregister(t *testing.T) {
 	}
 }
 
+// The clean-slate button sweeps every partner: the fanout mocks must be wiped in the same press,
+// and one unreachable fanout mock must not fail the whole sweep.
+func TestUnregisterSweepsFanout(t *testing.T) {
+	wipe := map[string]http.HandlerFunc{
+		"DELETE /admin/registrations": jsonResp(`{"deleted":1}`),
+		"POST /admin/seed/reset":      jsonResp(`{"reset":true,"seeded_objects":7}`),
+	}
+	mock := fakeMock(t, wipe)
+	vctReset := false
+	vct := fakeMock(t, map[string]http.HandlerFunc{
+		"DELETE /admin/registrations": jsonResp(`{"deleted":1}`),
+		"POST /admin/seed/reset": func(w http.ResponseWriter, _ *http.Request) {
+			vctReset = true
+			w.Write([]byte(`{"reset":true,"seeded_objects":7}`))
+		},
+	})
+	cfg := Config{FanoutMocks: []FanoutMock{
+		{Key: "vct", URL: vct.URL, AdminKey: adminKey, PathPrefix: "/vct"},
+		{Key: "chx", URL: "http://127.0.0.1:1", AdminKey: adminKey, PathPrefix: "/chx"},
+	}}
+	h := newHandlers(t, cfg, mock, nil)
+	rec := doReq(t, h.Unregister, http.MethodPost, "/api/demo/unregister", "")
+	got := decode(t, rec)
+	if rec.Code != http.StatusOK || !got.ok || !vctReset {
+		t.Fatalf("sweep failed: %d vctReset=%v %s", rec.Code, vctReset, rec.Body.String())
+	}
+	var data struct {
+		Fanout map[string]map[string]any `json:"fanout"`
+	}
+	if err := json.Unmarshal(got.data, &data); err != nil {
+		t.Fatalf("data: %v", err)
+	}
+	if data.Fanout["vct"] == nil || data.Fanout["chx"] == nil {
+		t.Fatalf("fanout results missing: %s", got.data)
+	}
+	if data.Fanout["chx"]["error"] == nil {
+		t.Fatalf("unreachable chx must report an error, got %v", data.Fanout["chx"])
+	}
+}
+
 func TestClearRequests(t *testing.T) {
 	called := false
 	mock := fakeMock(t, map[string]http.HandlerFunc{

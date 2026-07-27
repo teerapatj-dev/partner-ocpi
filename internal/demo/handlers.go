@@ -747,23 +747,44 @@ func (h *Handlers) ensureKafkaBaselineFor(ctx context.Context, admin *MockAdmin)
 // /credentials — so that side is cleared separately.
 func (h *Handlers) Unregister(c echo.Context) error {
 	ctx := c.Request().Context()
-	countryCode, partyID, partyErr := h.partnerParty(ctx)
-	deleted, err := h.mock.Delete(ctx, "/admin/registrations")
+	out, err := h.unregisterPartner(ctx, h.mock)
 	if err != nil {
 		return failFrom(c, err)
 	}
-	// Also wipe the partner's roaming data (received_* + log) and re-seed its own catalog, so the next
-	// demo run starts from a clean slate rather than the previous run's leftovers.
-	reset, err := h.mock.Post(ctx, "/admin/seed/reset", nil)
+	// The clean-slate button means the whole board: the fanout partners wipe too, each reported on
+	// its own (one unreachable mock must not abort the rest of the sweep).
+	if len(h.fanout) > 0 {
+		fanout := map[string]any{}
+		for _, p := range h.fanout {
+			if res, err := h.unregisterPartner(ctx, p.admin); err != nil {
+				fanout[p.Key] = map[string]any{"error": describeErr(err)}
+			} else {
+				fanout[p.Key] = res
+			}
+		}
+		out["fanout"] = fanout
+	}
+	return ok(c, out)
+}
+
+// unregisterPartner wipes one partner's mock side (registration + roaming data, own catalog
+// re-seeded) and clears Evolt's row for that party. Evolt offers no DELETE /credentials, so a
+// leftover REGISTERED row would block every re-handshake with 9999 (is_self=false guard; cascade
+// takes roles/endpoints/cache).
+func (h *Handlers) unregisterPartner(ctx context.Context, admin *MockAdmin) (map[string]any, error) {
+	countryCode, partyID, partyErr := partnerPartyOf(ctx, admin)
+	deleted, err := admin.Delete(ctx, "/admin/registrations")
 	if err != nil {
-		return failFrom(c, err)
+		return nil, err
+	}
+	reset, err := admin.Post(ctx, "/admin/seed/reset", nil)
+	if err != nil {
+		return nil, err
 	}
 	out := map[string]any{
 		"registration": json.RawMessage(deleted),
 		"data_reset":   json.RawMessage(reset),
 	}
-	// Evolt offers no DELETE /credentials, so its row for this party would stay REGISTERED and block
-	// every re-handshake with 9999 — clear it here (is_self=false; cascade takes roles/endpoints/cache).
 	if h.db != nil && partyErr == nil {
 		if n, err := h.db.DeletePartnerCredentials(ctx, countryCode, partyID); err != nil {
 			out["evolt_side"] = "ลบทะเบียนฝั่ง Evolt ไม่สำเร็จ: " + err.Error()
@@ -771,7 +792,7 @@ func (h *Handlers) Unregister(c echo.Context) error {
 			out["evolt_credentials_deleted"] = n
 		}
 	}
-	return ok(c, out)
+	return out, nil
 }
 
 // ClearRequests empties just the partner's request log (own/received data untouched).

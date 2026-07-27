@@ -208,7 +208,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
     <div class="setup">
       <span class="t">🌱 <b>ตั้งค่าเริ่มต้น</b> — ถ้า Evolt ยังไม่มีตัวตน OCPI (โดนล้าง) กด seed ก่อน แล้วค่อย handshake</span>
       <button class="secondary" onclick="runFlow('evolt-seed',this)">🌱 Initialize Evolt (seed 3 ตาราง)</button>
-      <button class="danger" onclick="if(confirm('ล้างทะเบียน + ข้อมูลของ PlugSiam ฝั่ง partner?\n\n• ลบทะเบียน + เคลียร์ received_* / log แล้ว seed own ใหม่\n• Evolt จะยังจำไว้ (spec ไม่มี DELETE /credentials)'))runFlow('unregister',this)">ยกเลิกทะเบียน + ล้าง DB</button>
+      <button class="danger" onclick="if(confirm('ล้างทะเบียน + ข้อมูลของทุก partner (PLG · VCT · CHX)?\n\n• ลบทะเบียน + เคลียร์ received_* / log แล้ว seed own ใหม่ ทุกเจ้า\n• ลบ row ฝั่ง Evolt ให้ด้วย (handshake ใหม่ได้ทันที)'))runFlow('unregister',this)">ยกเลิกทะเบียน + ล้าง DB ทุก partner</button>
     </div>
     <div class="subnav">
       <button class="seg in on" data-d="in" onclick="showDir('handshake','in',this)">🟢 Evolt เริ่ม</button>
@@ -469,8 +469,8 @@ const FLOWS={
     steps:['mock ออก Token A','Evolt (orch) เดิน handshake: GET mock /versions → details','orch POST /credentials เข้า mock (แลก Token C)','เก็บทะเบียน REGISTERED สองฝั่ง']},
   'partner-init':{title:'Handshake — Partner เริ่ม (PlugSiam → Evolt)',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/handshake/partner-init',
     steps:['mock ขอ Token A จาก orch','mock GET Evolt /versions','mock GET version details /2.2.1','mock POST /credentials → Evolt (แลก Token C)','Evolt callback ← mock /versions','ทะเบียน REGISTERED สองฝั่ง']},
-  'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB ฝั่ง partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
-    steps:['ลบ registration ใน mock DB','เคลียร์ received_* + request log','seed own catalog ใหม่ (เริ่มสะอาด)','(Evolt ยังจำไว้ — ไม่มี DELETE /credentials)']},
+  'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB — ทุก partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
+    steps:['ลบ registration ใน mock DB (PLG · VCT · CHX)','เคลียร์ received_* + request log ทุกเจ้า','seed own catalog ใหม่ (เริ่มสะอาด)','ลบ row ฝั่ง Evolt ของทุก party (ไม่มี DELETE /credentials ใน spec)']},
 
   'in-loc-pull':{title:'Roaming In · Location — partner ทุกเจ้าดึง locations ของเรา',card:'EV-1560',dir:'in',method:'POST',url:'/api/demo/pull/locations',body:{limit:5},
     steps:['ทุก partner ที่ REGISTERED ยิง GET /ocpi/cpo/2.2.1/locations พร้อมกัน (token ของใครของมัน)','bff → orch · orch → core-auth verify token','core-ocpi JOIN stations→chargers→evses→connectors → map OCPI','ห่อ envelope + X-Total-Count → partner']},

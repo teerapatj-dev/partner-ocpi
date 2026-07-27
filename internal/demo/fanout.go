@@ -113,26 +113,9 @@ func (h *Handlers) FanoutUnregister(c echo.Context) error {
 	if !found {
 		return fail(c, http.StatusBadRequest, "unknown fanout partner", nil)
 	}
-	ctx := c.Request().Context()
-	countryCode, partyID, partyErr := partnerPartyOf(ctx, p.admin)
-	deleted, err := p.admin.Delete(ctx, "/admin/registrations")
+	out, err := h.unregisterPartner(c.Request().Context(), p.admin)
 	if err != nil {
 		return failFrom(c, err)
-	}
-	reset, err := p.admin.Post(ctx, "/admin/seed/reset", nil)
-	if err != nil {
-		return failFrom(c, err)
-	}
-	out := map[string]any{
-		"registration": json.RawMessage(deleted),
-		"data_reset":   json.RawMessage(reset),
-	}
-	if h.db != nil && partyErr == nil {
-		if n, err := h.db.DeletePartnerCredentials(ctx, countryCode, partyID); err != nil {
-			out["evolt_side"] = "ลบทะเบียนฝั่ง Evolt ไม่สำเร็จ: " + err.Error()
-		} else {
-			out["evolt_credentials_deleted"] = n
-		}
 	}
 	return ok(c, out)
 }
