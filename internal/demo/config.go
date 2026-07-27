@@ -72,6 +72,9 @@ type Config struct {
 	BatchAppEnv   string
 	BatchTokenKey string
 
+	// Rate limits are per client IP, but everyone arrives through one tunnel, so the whole QA
+	// group shares a single bucket. The defaults are sized for that: a visible tab polls ~8
+	// reads per 10s, and a press is one write.
 	RatePostPer10s int
 	RateGetPer10s  int
 	Timeout        time.Duration
@@ -125,8 +128,8 @@ func Load() (Config, error) {
 		BatchTokenKey:    os.Getenv("BATCH_TOKEN_ENCRYPTION_KEY"),
 		KafkaPartyCC:     getenv("DEMO_KAFKA_PARTY_CC", "TH"),
 		KafkaPartyID:     getenv("DEMO_KAFKA_PARTY_ID", "EVO"),
-		RatePostPer10s:   intenv("DEMO_RATE_POST_PER_10S", 10),
-		RateGetPer10s:    intenv("DEMO_RATE_GET_PER_10S", 60),
+		RatePostPer10s:   intenv("DEMO_RATE_POST_PER_10S", 40),
+		RateGetPer10s:    intenv("DEMO_RATE_GET_PER_10S", 300),
 		Timeout:          time.Duration(intenv("DEMO_TIMEOUT_SECONDS", 30)) * time.Second,
 	}
 	for _, s := range strings.Split(os.Getenv("DEMO_ALLOWED_STATION_IDS"), ",") {

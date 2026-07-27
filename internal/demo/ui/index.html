@@ -1178,16 +1178,31 @@ async function loadTablePage(){
 }
 
 // ---- boot ----
+/* Every panel polls, so a QA tab left open all afternoon is pure traffic. poll() skips the tick
+   while the tab is hidden and fires once on the way back, which keeps a background tab at zero
+   requests without making a visible tab feel stale. Only the tab the tester is looking at costs
+   anything — that is what let several people share one tunnel. */
+function poll(fn,ms){
+  setInterval(()=>{if(!document.hidden)fn()},ms);
+}
+let wasHidden=false;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){wasHidden=true;return}
+  if(!wasHidden)return;
+  wasHidden=false;
+  refreshState();refreshLog();refreshPartnerData();refreshPartnerCache();refreshStationEvses();refreshFanout();refreshMirror();
+});
+
 chgBindSlider('in');chgBindSlider('out');
-refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();refreshStationEvses();refreshPartnerCache();
-setInterval(refreshStationEvses,8000);
-setInterval(refreshState,3000);
-setInterval(refreshLog,3000);
-setInterval(refreshPartnerData,2500);
-setInterval(refreshPartnerCache,2500);
-refreshFanout();setInterval(refreshFanout,6000);
-setInterval(refreshMirror,5000);
-setInterval(refreshOwn,15000);
+refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();refreshStationEvses();refreshPartnerCache();refreshFanout();
+poll(refreshStationEvses,8000);
+poll(refreshState,3000);
+poll(refreshLog,3000);
+poll(refreshPartnerData,2500);
+poll(refreshPartnerCache,2500);
+poll(refreshFanout,6000);
+poll(refreshMirror,5000);
+poll(refreshOwn,15000);
 </script>
 </body>
 </html>
