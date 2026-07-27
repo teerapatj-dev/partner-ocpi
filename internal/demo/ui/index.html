@@ -592,8 +592,9 @@ const CHARGERS={
   out:{
     kW:60, endpoint:'/api/demo/push/evse-status',
     body:s=>({evse_uid:val('sel-evse'),status:s}),
-    start:[{s:'CHARGING',t:'partner PATCH → CHARGING'}],
-    stop:[{s:'AVAILABLE',t:'partner PATCH → AVAILABLE'}]},
+    start:[{s:'CHARGING',t:'เสียบสาย → ตู้เริ่มจ่ายไฟ'}],
+    stop:[{s:'CHARGING',t:'กดหยุด → สายยังเสียบ (OCPI ไม่มี FINISHING เลยคงเป็น CHARGING)'},
+          {s:'AVAILABLE',t:'ถอดสาย → หัวชาร์จว่าง'}]},
 };
 const chgState={in:{charging:false,busy:false,timer:null,t0:0},out:{charging:false,busy:false,timer:null,t0:0}};
 
