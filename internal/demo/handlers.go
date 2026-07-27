@@ -87,6 +87,12 @@ func (h *Handlers) State(c echo.Context) error {
 		degraded = append(degraded, "mock")
 	}
 	kafkaEnabled, kafkaReason := h.kafka.Enabled()
+	stationNames := map[string]string{}
+	if h.db != nil && len(h.cfg.AllowedStations) > 0 {
+		if names, err := h.db.StationNames(ctx, h.cfg.AllowedStations); err == nil {
+			stationNames = names
+		}
+	}
 
 	return ok(c, map[string]any{
 		"partner":       json.RawMessage(orNull(partnerState)),
@@ -98,6 +104,7 @@ func (h *Handlers) State(c echo.Context) error {
 		"kafka":            map[string]any{"enabled": kafkaEnabled, "reason": kafkaReason},
 		"batch_jobs":       h.batch.Jobs(),
 		"allowed_stations": h.cfg.AllowedStations,
+		"station_names":    stationNames,
 		"public_base_url":  h.cfg.PublicBaseURL,
 		"degraded":         degraded,
 		"time":             time.Now().UTC().Format(time.RFC3339),
@@ -425,6 +432,15 @@ func (h *Handlers) PartnerPull(c echo.Context) error {
 			if err != nil {
 				results[i] = pullResult{Partner: tg.key, Error: describeErr(err)}
 				return
+			}
+			// The sync stores a sample, and the station the charge slider drives is rarely in it.
+			// Fetch that one by id afterwards (the Locations module's object GET) so the slider has
+			// something real to PATCH without pulling the whole estate.
+			if req.All && kind == "locations" && h.cfg.KafkaStationID != "" {
+				if _, err := tg.admin.Post(ctx, "/admin/pull/locations",
+					map[string]any{"location_id": h.cfg.KafkaStationID}); err != nil {
+					log.Warn().Err(err).Str("partner", tg.key).Msg("demo station object GET failed")
+				}
 			}
 			results[i] = pullResult{Partner: tg.key, OK: true, Result: json.RawMessage(raw)}
 		}(i, tg)

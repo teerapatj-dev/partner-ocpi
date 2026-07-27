@@ -122,6 +122,13 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 .pgroup.closed .caret{transform:rotate(-90deg)}
 .pgroup .cnt{margin-left:auto;font-weight:400;color:var(--muted)}
 .pbody.closed{display:none}
+.el{border-left:2px solid var(--line);padding:4px 0 4px 8px;margin:6px 0}
+.elhead{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;margin-bottom:2px}
+.elno{font-weight:700;color:var(--muted)}
+.elcond{color:#7dd3fc}
+.elcond.fb{color:var(--muted);font-style:italic}
+.elwin{margin-left:auto;color:var(--green);font-size:10px;border:1px solid currentColor;border-radius:8px;padding:0 6px}
+.elnote{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5}
 @keyframes flashbg{0%{background:rgba(255,180,84,.55);border-color:var(--amber)}100%{background:var(--bg);border-color:var(--line)}}
 @keyframes flashchip{0%{background:rgba(255,180,84,.65)}100%{background:transparent}}
 .item.flash{animation:flashbg 2.2s ease-out}.chip.flash{animation:flashchip 2.2s ease-out}
@@ -194,8 +201,6 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
 <body>
 <header>
   <h1>⚡ OCPI Roaming Demo</h1>
-  <span class="badge" id="b-partner">partner: …</span>
-  <span class="badge" id="b-reg">registration: …</span>
   <span class="badge" id="b-evolt">Evolt: …</span>
   <span class="badge" id="b-kafka">Kafka: …</span>
 </header>
@@ -695,9 +700,6 @@ async function refreshState(){
   try{
     const r=await api('/api/demo/state');const j=await r.json();if(!j.ok)return;
     const d=j.data,p=d.partner;
-    badge($('b-partner'),p?`partner: ${p.partner.name} (${p.partner.country_code}-${p.partner.party_id})`:'partner: mock ล่ม',p?'on':'off');
-    const reg=(d.partner&&d.partner.registration_status)||'';
-    badge($('b-reg'),'ทะเบียน (partner): '+(reg||'ยังไม่มี'),reg==='REGISTERED'?'on':'warn');
     badge($('b-evolt'),'Evolt: '+(d.evolt.reachable?'online':(d.evolt.configured?'offline':'ไม่ได้ตั้งค่า')),d.evolt.reachable?'on':'off');
     badge($('b-kafka'),'Kafka: '+(d.kafka.enabled?'พร้อม':'ปิด'),d.kafka.enabled?'on':'warn');
     $('banner').style.display=(d.evolt.configured&&!d.evolt.reachable)?'block':'none';
@@ -705,10 +707,10 @@ async function refreshState(){
     setCronButtons(d.batch_jobs||[]);
     const sel=$('sel-station');
     if(sel.options.length===0&&(d.allowed_stations||[]).length)
-      d.allowed_stations.forEach(s=>sel.add(new Option(s.slice(0,8)+'…',s)));
+      d.allowed_stations.forEach(s=>sel.add(new Option((d.station_names||{})[s]||s.slice(0,8)+'…',s)));
     window._st=d;renderHandshake();
     if(p&&p.counts)$('counts').innerHTML=Object.entries(p.counts).map(([k,v])=>`<div>${k}<b>${v}</b></div>`).join('');
-  }catch(e){badge($('b-partner'),'partner: demo backend ล่ม','off')}
+  }catch(e){badge($('b-evolt'),'demo backend ล่ม','off')}
 }
 
 async function refreshStationEvses(){
@@ -743,11 +745,51 @@ async function refreshOwn(){
 const prevSig=new Map();
 function changed(key,sig){const b=prevSig.get(key);prevSig.set(key,sig);return b!==undefined&&b!==sig}
 const UNIT={ENERGY:'/kWh',TIME:'/ชม.',PARKING_TIME:'/ชม.จอด',FLAT:'/ครั้ง'};
+const DAY_TH={MONDAY:'จ.',TUESDAY:'อ.',WEDNESDAY:'พ.',THURSDAY:'พฤ.',FRIDAY:'ศ.',SATURDAY:'ส.',SUNDAY:'อา.'};
+
+/* OCPI element order IS the pricing rule: the CPO reads top-down and the first element whose
+   restrictions match wins, so an element with no restrictions is the fallback and must sit last.
+   Evolt orders them DEAL → PROMOTION → ALTERNATIVE → BASE, most-specific first within each
+   (tariff_translator.buildTariff). The wire format keeps no plan name, so the panel labels what it
+   can prove: position, restrictions, and which one is the no-condition fallback. */
+function restrictionText(r){
+  if(!r)return '';
+  const bits=[];
+  const days=(r.day_of_week||[]).map(d=>DAY_TH[d]||d).join(' ');
+  if(days)bits.push(days);
+  if(r.start_time||r.end_time)bits.push(`${esc(r.start_time||'00:00')}–${esc(r.end_time||'24:00')}`);
+  if(r.start_date||r.end_date)bits.push(`${esc(r.start_date||'')}→${esc(r.end_date||'')}`);
+  if(r.min_kwh!=null)bits.push(`≥${esc(String(r.min_kwh))} kWh`);
+  if(r.max_kwh!=null)bits.push(`≤${esc(String(r.max_kwh))} kWh`);
+  if(r.min_power!=null)bits.push(`≥${esc(String(r.min_power))} kW`);
+  if(r.max_power!=null)bits.push(`≤${esc(String(r.max_power))} kW`);
+  if(r.min_duration!=null)bits.push(`≥${esc(String(r.min_duration))} วิ`);
+  if(r.max_duration!=null)bits.push(`≤${esc(String(r.max_duration))} วิ`);
+  if(r.reservation)bits.push(esc(r.reservation));
+  return bits.join(' · ');
+}
 function priceLines(p){
+  const els=p.elements||[];
   const out=[];
-  (p.elements||[]).forEach(el=>(el.price_components||[]).forEach(pc=>
-    out.push(`${pc.price}<small>${p.currency||''} ${UNIT[pc.type]||''}${pc.vat!=null?' · VAT '+pc.vat+'%':''}</small>`)));
+  els.forEach((el,i)=>{
+    const cond=restrictionText(el.restrictions);
+    const fallback=!cond;
+    const head=`<div class="elhead"><span class="elno">#${i+1}</span>`+
+      (fallback?'<span class="elcond fb">ไม่มีเงื่อนไข — ราคาสำรอง (fallback)</span>'
+               :`<span class="elcond">${cond}</span>`)+
+      (i===0&&!fallback?'<span class="elwin">ชนะก่อน</span>':'')+'</div>';
+    const prices=(el.price_components||[]).map(pc=>
+      `<div class="price">${pc.price}<small>${p.currency||''} ${UNIT[pc.type]||''}`+
+      `${pc.step_size!=null?' · step '+pc.step_size:''}${pc.vat!=null?' · VAT '+pc.vat+'%':''}</small></div>`).join('');
+    out.push(`<div class="el">${head}${prices}</div>`);
+  });
+  if(els.length>1)out.push('<div class="elnote">อ่านบนลงล่าง — element แรกที่เงื่อนไขตรงคือราคาที่ใช้ (Evolt เรียง DEAL → PROMO → ALT → BASE, เจาะจงมากอยู่บน, ไม่มีเงื่อนไขอยู่ล่างสุด)</div>');
   return out;
+}
+function altTextLines(p){
+  const t=(p.tariff_alt_text||[]).map(x=>x.text).filter(Boolean);
+  if(!t.length)return '';
+  return `<div class="when">📛 ชื่อแพ็กเกจที่รวมอยู่: ${t.map(x=>`<b>${esc(x)}</b>`).join(' · ')}</div>`;
 }
 
 // ---- handshake status (both dir panes) ----
@@ -853,8 +895,8 @@ async function refreshPartnerData(){
         const origin=o?`<div class="when">🏢 ${esc(o.station_name||o.station_id)} · scope <b>${esc(o.scope)}</b></div>`:'';
         body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
           `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
-          origin+
-          priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+          origin+altTextLines(p)+
+          priceLines(p).join('')+
           `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
       });
       th.push(pgroupBody(gid,body.join('')));
@@ -892,7 +934,7 @@ async function refreshMirror(){
       const p=asObj(d.tariff),f=changed('mtrf:'+d.tariff_id,JSON.stringify(p))?' flash':'';
       th.push(`<div class="item${f}"><div class="top"><span class="name">ราคาที่ Evolt เก็บ (อ่านกลับ)</span>`+
         `<span class="when"><button class="ghost" onclick='showJSON("evolt stored tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
-        priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+        priceLines(p).join('')+
         `<div class="when mono" style="margin-top:6px">${esc(d.tariff_id)}</div></div>`);
     }else if(tid){
       th.push(`<div class="empty">Evolt ยังไม่มี tariff <span class="mono">${esc(tid)}</span><br>กด Roaming Out · Tariff (PUT)</div>`);
@@ -931,7 +973,7 @@ function partnerTariffCards(){
       body.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||t.tariff_id)}</span>`+
         `<span class="when"><button class="ghost" onclick='showJSON("evolt cached partner tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
         (del?`<div class="chips">${del}</div>`:'')+
-        priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+        priceLines(p).join('')+
         `<div class="when" style="margin-top:6px">รับเข้า: ${esc(ago(t.synced_at))} <span class="mono">${esc(thTime(t.synced_at))}</span></div>`+
         `<div class="when mono">${esc(t.tariff_id)}</div></div>`);
     });

@@ -164,6 +164,10 @@ type pullRequest struct {
 	Limit int `json:"limit"`
 	// All walks every page (initial-sync style) instead of the first page only.
 	All bool `json:"all"`
+	// Max caps how many objects the walk stores (0 = the demo default sample).
+	Max int `json:"max"`
+	// LocationID fetches exactly that one object instead of a list (locations only).
+	LocationID string `json:"location_id"`
 }
 
 func (h *Handlers) AdminPullCounterparty(c echo.Context) error {
@@ -182,8 +186,22 @@ func (h *Handlers) AdminPullCounterparty(c echo.Context) error {
 	if limit > 100 {
 		limit = 100
 	}
+	if req.LocationID != "" {
+		if kind != "locations" {
+			return adminErr(c, http.StatusBadRequest, "location_id applies to locations only")
+		}
+		result, err := h.cl.PullOneLocation(c.Request().Context(), req.LocationID)
+		if err != nil {
+			return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": result})
+		}
+		return c.JSON(http.StatusOK, result)
+	}
 	if req.All {
-		result, err := h.cl.PullAllFromCounterparty(c.Request().Context(), kind, limit, 25)
+		max := req.Max
+		if max == 0 {
+			max = 20 // demo sample size; the paging itself stays real
+		}
+		result, err := h.cl.PullAllFromCounterparty(c.Request().Context(), kind, limit, 25, max)
 		if err != nil {
 			return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": result})
 		}

@@ -578,10 +578,12 @@ type PullAllResult struct {
 	Stored         int    `json:"stored"`
 }
 
-// PullAllFromCounterparty walks the counterparty's whole SENDER list the way a real eMSP runs its
-// initial sync after registration: page after page until the feed is exhausted (or maxPages, a
-// runaway guard). Every object lands in received_* exactly as a single-page pull would store it.
-func (c *Client) PullAllFromCounterparty(ctx context.Context, identifier string, pageLimit, maxPages int) (PullAllResult, error) {
+// PullAllFromCounterparty walks the counterparty's SENDER list the way a real eMSP runs its initial
+// sync after registration: page after page until the feed is exhausted, maxItems have been stored,
+// or maxPages (a runaway guard) is hit. Every object lands in received_* exactly as a single-page
+// pull would store it. maxItems <= 0 means the whole feed — the demo caps it so the panels stay
+// readable while the paging itself stays real.
+func (c *Client) PullAllFromCounterparty(ctx context.Context, identifier string, pageLimit, maxPages, maxItems int) (PullAllResult, error) {
 	reg, err := c.st.FirstRegistered(ctx)
 	if err != nil {
 		return PullAllResult{}, fmt.Errorf("no REGISTERED counterparty: %w", err)
@@ -609,7 +611,13 @@ func (c *Client) PullAllFromCounterparty(ctx context.Context, identifier string,
 		if err := parseEnvelope(res, &items); err != nil {
 			return out, fmt.Errorf("parse %s page at offset %d: %w", identifier, offset, err)
 		}
+		if maxItems > 0 {
+			items = truncateItems(items, maxItems-out.Stored)
+		}
 		out.Stored += c.cachePulled(ctx, identifier, items, reg.CountryCode, reg.PartyID)
+		if maxItems > 0 && out.Stored >= maxItems {
+			break
+		}
 		var arr []json.RawMessage
 		if err := json.Unmarshal(items, &arr); err != nil || len(arr) < pageLimit {
 			break // short (or empty) page = the feed is done
@@ -619,6 +627,57 @@ func (c *Client) PullAllFromCounterparty(ctx context.Context, identifier string,
 		}
 	}
 	return out, nil
+}
+
+// PullOneLocation fetches a single Location by id — the object-level GET of the Locations module
+// (OCPI §7.1, Evolt exposes it as /ocpi/cpo/2.2.1/locations/{id}). The demo uses it to make sure the
+// station it drives with the charge slider is present even when the sampled pages missed it.
+func (c *Client) PullOneLocation(ctx context.Context, locationID string) (PullResult, error) {
+	reg, err := c.st.FirstRegistered(ctx)
+	if err != nil {
+		return PullResult{}, fmt.Errorf("no REGISTERED counterparty: %w", err)
+	}
+	base, err := c.endpointURL(reg, "locations", "SENDER")
+	if err != nil {
+		return PullResult{}, err
+	}
+	url := strings.TrimRight(base, "/") + "/" + locationID
+	res, err := c.do(ctx, http.MethodGet, url, reg.TokenOutbound, nil, reg.CountryCode, reg.PartyID)
+	if err != nil {
+		return PullResult{URL: url}, err
+	}
+	out := PullResult{URL: url, HTTPStatus: res.HTTPStatus}
+	out.OCPIStatusCode, _ = parseAnyStatus(res.Body)
+	var obj json.RawMessage
+	if err := parseEnvelope(res, &obj); err != nil {
+		return out, fmt.Errorf("parse location %s: %w", locationID, err)
+	}
+	// cachePulled takes a list; a single object is a list of one.
+	list, err := json.Marshal([]json.RawMessage{obj})
+	if err != nil {
+		return out, err
+	}
+	out.Items = list
+	if n := c.cachePulled(ctx, "locations", list, reg.CountryCode, reg.PartyID); n > 0 {
+		out.Stored = &n
+	}
+	return out, nil
+}
+
+// truncateItems keeps at most n objects of a page — the demo stores a sample, not the estate.
+func truncateItems(items json.RawMessage, n int) json.RawMessage {
+	if n <= 0 {
+		return json.RawMessage("[]")
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(items, &arr); err != nil || len(arr) <= n {
+		return items
+	}
+	out, err := json.Marshal(arr[:n])
+	if err != nil {
+		return items
+	}
+	return out
 }
 
 // cachePulled writes each pulled CPO object into received_* (locations explode into evses/connectors).

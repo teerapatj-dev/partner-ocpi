@@ -592,6 +592,30 @@ func (b *DBBrowser) TariffOrigins(ctx context.Context, ids []string) (map[string
 	return out, rows.Err()
 }
 
+// StationNames resolves the demo's allowed station ids to their names, so a picker reads
+// "TAPPY Station" rather than a truncated uuid.
+func (b *DBBrowser) StationNames(ctx context.Context, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	if b.evolt == nil || len(ids) == 0 {
+		return out, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	rows, err := b.evolt.Query(ctx, `SELECT id::text, COALESCE(name,'') FROM stations WHERE id::text = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("resolve station names: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
 // PartnerCacheTariff is one partner tariff as Evolt cached it; Raw is the stored OCPI object so the
 // panel can price it the same way the mock's side does.
 type PartnerCacheTariff struct {
