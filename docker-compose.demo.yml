@@ -4,6 +4,7 @@
 # see .env.demo.example for the full list.
 services:
   demo:
+    restart: unless-stopped
     build:
       context: .
       target: demo

@@ -2,6 +2,7 @@
 # Demo-only credentials; nothing here is a real secret.
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: mock
@@ -17,6 +18,7 @@ services:
       retries: 15
 
   plugsiam:
+    restart: unless-stopped
     build: .
     depends_on:
       postgres:
@@ -32,6 +34,7 @@ services:
       - "9101:8080"
 
   voltcity:
+    restart: unless-stopped
     build: .
     depends_on:
       postgres:
@@ -47,6 +50,7 @@ services:
       - "9102:8080"
 
   chargex:
+    restart: unless-stopped
     build: .
     depends_on:
       postgres:
