@@ -534,9 +534,18 @@ type PartnerCacheLocation struct {
 }
 
 type PartnerCacheEvse struct {
-	UID         string `json:"uid"`
-	Status      string `json:"status"`
-	LastUpdated string `json:"last_updated"`
+	UID         string                  `json:"uid"`
+	Status      string                  `json:"status"`
+	LastUpdated string                  `json:"last_updated"`
+	Connectors  []PartnerCacheConnector `json:"connectors,omitempty"`
+}
+
+// PartnerCacheConnector is what the panel needs to answer "how fast is this head" without
+// sending the reader to the Tables tab.
+type PartnerCacheConnector struct {
+	ID       string `json:"id"`
+	Standard string `json:"standard"`
+	PowerW   int    `json:"power_w"`
 }
 
 // DeletePartnerCredentials removes this partner's registration from Evolt; roles, endpoints and the
@@ -674,7 +683,10 @@ func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, part
 		       to_char(l.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),
 		       COALESCE(to_char(l.synced_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),''),
 		       COALESCE(e.evse_uid,''), COALESCE(e.status,''),
-		       COALESCE(to_char(e.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),'')
+		       COALESCE(to_char(e.last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),''),
+		       COALESCE((SELECT string_agg(c.connector_id || '|' || COALESCE(c.standard,'') || '|' ||
+		                        COALESCE(c.max_electric_power::text,''), ';' ORDER BY c.connector_id)
+		                 FROM ocpi_partner_connectors c WHERE c.evse_id = e.id), '')
 		FROM ocpi_partner_locations l
 		LEFT JOIN ocpi_partner_evses e ON e.location_id = l.id
 		WHERE l.country_code = $1 AND l.party_id = $2
@@ -688,8 +700,8 @@ func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, part
 	out := []PartnerCacheLocation{}
 	byID := map[string]int{}
 	for rows.Next() {
-		var locID, name, city, locUpdated, locSynced, evseUID, status, evseUpdated string
-		if err := rows.Scan(&locID, &name, &city, &locUpdated, &locSynced, &evseUID, &status, &evseUpdated); err != nil {
+		var locID, name, city, locUpdated, locSynced, evseUID, status, evseUpdated, conns string
+		if err := rows.Scan(&locID, &name, &city, &locUpdated, &locSynced, &evseUID, &status, &evseUpdated, &conns); err != nil {
 			return nil, err
 		}
 		idx, seen := byID[locID]
@@ -702,10 +714,28 @@ func (b *DBBrowser) PartnerCacheLocations(ctx context.Context, countryCode, part
 			byID[locID] = idx
 		}
 		if evseUID != "" {
-			out[idx].Evses = append(out[idx].Evses, PartnerCacheEvse{UID: evseUID, Status: status, LastUpdated: evseUpdated})
+			out[idx].Evses = append(out[idx].Evses, PartnerCacheEvse{
+				UID: evseUID, Status: status, LastUpdated: evseUpdated, Connectors: parseConnectorAgg(conns)})
 		}
 	}
 	return out, rows.Err()
+}
+
+// parseConnectorAgg unpacks the "id|standard|watts;…" string the query aggregates per EVSE.
+func parseConnectorAgg(agg string) []PartnerCacheConnector {
+	if agg == "" {
+		return nil
+	}
+	var out []PartnerCacheConnector
+	for _, part := range strings.Split(agg, ";") {
+		f := strings.SplitN(part, "|", 3)
+		if len(f) != 3 {
+			continue
+		}
+		w, _ := strconv.Atoi(f[2])
+		out = append(out, PartnerCacheConnector{ID: f[0], Standard: f[1], PowerW: w})
+	}
+	return out
 }
 
 // DemoStationEvses lists the demo station's EVSEs so the UI can offer them as push targets.

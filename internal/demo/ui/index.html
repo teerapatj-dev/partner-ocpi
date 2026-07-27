@@ -284,12 +284,16 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <div class="flowhead">⬆️ PUSH <span class="tagp">partner ยัดเข้ามา</span></div>
         <p class="mini">OCPI มี 3 ระดับวัตถุ — Location / EVSE / Connector · <b>PUT</b> = ส่งทั้งก้อน (สร้างหรือแทนที่) · <b>PATCH</b> = ส่งเฉพาะฟิลด์ที่เปลี่ยน</p>
         <div class="act"><span class="lbl">1️⃣ Location</span>
-          <select id="sel-location" onchange="fillEvses()"></select>
+          <select id="sel-location" onchange="locPickTouched=true;fillEvses()"></select>
           <button class="out" onclick="runFlow('out-loc-put',this)">PUT ทั้งก้อน</button>
           <button class="out" onclick="runFlow('out-loc-patch',this)">PATCH เปลี่ยนชื่อ</button></div>
         <div class="act"><span class="lbl">2️⃣ EVSE</span>
           <select id="sel-evse" onchange="fillConnectors()"></select>
           <button class="out" onclick="runFlow('out-evse-put',this)">PUT ทั้งก้อน</button>
+          <select id="sel-evse-patch-status" title="สถานะที่จะ PATCH">
+            <option>CHARGING</option><option>AVAILABLE</option><option>BLOCKED</option>
+            <option>RESERVED</option><option>INOPERATIVE</option><option>OUTOFORDER</option>
+            <option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
           <button class="out" onclick="runFlow('out-evse-patch',this)">PATCH สถานะ</button></div>
         <div class="act"><span class="lbl">3️⃣ Connector</span>
           <select id="sel-connector" onchange="labelPushTargets()"></select>
@@ -504,7 +508,7 @@ const FLOWS={
     bodyFrom:()=>({method:'PUT',level:'evse',location_id:val('sel-location'),evse_uid:val('sel-evse')}),
     steps:['partner ส่ง EVSE object เต็ม (พร้อม connectors)','PUT .../locations/{cc}/{party}/{loc}/{evse_uid}','core-ocpi upsert แถว evse + connectors ใต้มัน','ตอบ 1000']},
   'out-evse-patch':{title:'Roaming Out · EVSE — PATCH เฉพาะสถานะ',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
-    bodyFrom:()=>({method:'PATCH',level:'evse',location_id:val('sel-location'),evse_uid:val('sel-evse'),mutate:{status:val('sel-evse-status')}}),
+    bodyFrom:()=>({method:'PATCH',level:'evse',location_id:val('sel-location'),evse_uid:val('sel-evse'),mutate:{status:val('sel-evse-patch-status')}}),
     steps:['partner เปลี่ยนสถานะหัวชาร์จในระบบตัวเอง','ยิง PATCH .../{loc}/{evse_uid} (เฉพาะ status + last_updated)','core-ocpi merge ทับเฉพาะฟิลด์นั้น','ตอบ 1000 — ฟิลด์อื่นของ EVSE ไม่ถูกแตะ']},
   'out-conn-put':{title:'Roaming Out · Connector — PUT ทั้งก้อน',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/push/object',
     bodyFrom:()=>({method:'PUT',level:'connector',location_id:val('sel-location'),evse_uid:val('sel-evse'),connector_id:val('sel-connector')}),
@@ -773,6 +777,14 @@ async function refreshOwn(){
       sl.innerHTML='';
       ownLocs.forEach(l=>sl.add(new Option(`${l.id} — ${l.name||''}`,l.id)));
       if(keep&&ownLocs.some(l=>l.id===keep))sl.value=keep;
+      // Until the tester picks for themselves, prefer a location Evolt already holds: starting on
+      // one it has never seen leaves the right-hand panel empty, which reads as "nothing happened".
+      // The cache arrives on its own poll, so this keeps trying until there is something to match.
+      if(!locPickTouched&&!locDefaulted){
+        const held=new Set(((partnerCacheParts.find(p=>p.key==='PLG')||{}).locations||[]).map(l=>l.location_id));
+        const first=ownLocs.find(l=>held.has(l.id));
+        if(first){sl.value=first.id;locDefaulted=true}
+      }
       fillEvses();
     }
     if(trfs.ok){const st=$('sel-tariff'),keep=st.value;st.innerHTML='';(trfs.data||[]).forEach(t=>st.add(new Option(t.id,t.id)));if(keep)st.value=keep;}
@@ -781,7 +793,7 @@ async function refreshOwn(){
 
 /* The PATCH buttons must send a real change, so the new value is derived from what the partner
    currently holds (loaded with the pickers) rather than a constant that could already be in place. */
-let ownLocs=[],demoStationName='';
+let ownLocs=[],demoStationName='',locPickTouched=false,locDefaulted=false;
 function currentLoc(){return ownLocs.find(l=>l.id===val('sel-location'))||null}
 function currentEvse(){
   const l=currentLoc();if(!l)return null;
@@ -1065,6 +1077,7 @@ async function refreshPartnerCache(){
     const r=await api('/api/demo/evolt/partner-cache');const j=await r.json();
     if(!j.ok)return;
     partnerCacheParts=(j.data||{}).partners||[];
+    if(!locPickTouched&&!locDefaulted&&ownLocs.length)refreshOwn();
     if($('res-loc-out')&&!$('location-out').classList.contains('hidden'))refreshMirror();
     if($('res-trf-out')&&!$('tariff-out').classList.contains('hidden'))refreshMirror();
   }catch(e){}
@@ -1107,7 +1120,8 @@ function partnerCacheCards(){
     rows.forEach(l=>{
       const chips=(l.evses||[]).map(e=>{
         const st=e.status||'UNKNOWN',f=changed('pc:'+pt.key+':'+l.location_id+'/'+e.uid,st+'|'+e.last_updated)?' flash':'';
-        return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc(e.uid)}</span></span>`;
+        const kw=(e.connectors||[]).map(c=>`${c.id}:${Math.round((c.power_w||0)/1000)}kW`).join(' ');
+        return `<span class="chip st-${esc(st)}${f}"><b>${esc(st)}</b><span class="uid">${esc(e.uid)}${kw?' · '+esc(kw):''}</span></span>`;
       }).join('');
       const when=(l.evses||[]).map(e=>e.last_updated).sort().pop()||l.last_updated;
       const f=changed('pcl:'+pt.key+':'+l.location_id,when+'|'+(l.synced_at||''))?' flash':'';
