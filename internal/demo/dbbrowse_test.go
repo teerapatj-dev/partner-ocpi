@@ -103,9 +103,22 @@ func TestCrossDBColumnIsNotSearchable(t *testing.T) {
 		}
 	}
 	b := &DBBrowser{tables: browsableTables}
-	_, err := b.Query(context.Background(), "received_tariffs", "station_id", "x", 1)
+	_, err := b.Query(context.Background(), "received_tariffs", "", "station_id", "x", 1)
 	if err == nil || !strings.Contains(err.Error(), "tariff_id") {
 		t.Fatalf("filtering a cross-DB column must be refused with a hint, got %v", err)
+	}
+}
+
+// db selects a pool, never SQL — an unknown key must be refused before any query is built.
+func TestUnknownPartnerDBIsRefused(t *testing.T) {
+	b := &DBBrowser{tables: browsableTables}
+	_, err := b.Query(context.Background(), "own_locations", "zzz", "", "", 1)
+	if err == nil || !strings.Contains(err.Error(), "unknown partner db") {
+		t.Fatalf("expected unknown partner db error, got %v", err)
+	}
+	if _, err := b.Query(context.Background(), "ocpi_credentials", "zzz", "", "", 1); err == nil ||
+		strings.Contains(err.Error(), "unknown partner db") {
+		t.Fatalf("evolt side must ignore db, got %v", err)
 	}
 }
 

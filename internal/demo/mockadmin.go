@@ -20,9 +20,14 @@ type MockAdmin struct {
 }
 
 func NewMockAdmin(cfg Config) *MockAdmin {
+	return NewMockAdminAt(cfg.MockBaseURL, cfg.MockAdminKey, cfg)
+}
+
+// NewMockAdminAt targets one specific mock instance — the fanout partners each get their own.
+func NewMockAdminAt(baseURL, key string, cfg Config) *MockAdmin {
 	return &MockAdmin{
-		baseURL: cfg.MockBaseURL,
-		key:     cfg.MockAdminKey,
+		baseURL: baseURL,
+		key:     key,
 		httpc:   &http.Client{Timeout: cfg.Timeout},
 	}
 }

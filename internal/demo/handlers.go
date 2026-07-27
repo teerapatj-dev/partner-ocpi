@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog/log"
 )
 
 var evseStatuses = map[string]bool{
@@ -28,10 +30,22 @@ type Handlers struct {
 	charger *ChargerDB   // nil when the charger simulator is not configured
 	db      *DBBrowser   // nil when no DB is configured (table browser + evolt seed off)
 	batch   *BatchRunner // nil when the batch binaries are not mounted (cron buttons off)
+
+	// fanout holds the extra partner instances (VCT/CHX) in config order; empty = single-partner demo.
+	fanout []fanoutPartner
+}
+
+type fanoutPartner struct {
+	FanoutMock
+	admin *MockAdmin
 }
 
 func NewHandlers(cfg Config, mock *MockAdmin, evolt *Evolt, kafka *Kafka, charger *ChargerDB, db *DBBrowser, batch *BatchRunner) *Handlers {
-	return &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger, db: db, batch: batch}
+	h := &Handlers{cfg: cfg, mock: mock, evolt: evolt, kafka: kafka, charger: charger, db: db, batch: batch}
+	for _, m := range cfg.FanoutMocks {
+		h.fanout = append(h.fanout, fanoutPartner{FanoutMock: m, admin: NewMockAdminAt(m.URL, m.AdminKey, cfg)})
+	}
+	return h
 }
 
 func ok(c echo.Context, data any) error {
@@ -119,7 +133,21 @@ func (h *Handlers) PartnerInitHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
+	h.seedBaselineAfterHandshake(ctx)
 	return ok(c, json.RawMessage(result))
+}
+
+// seedBaselineAfterHandshake PUTs the demo station's baseline location into the partner as soon as a
+// registration completes — the moment the real CPO would publish its estate. From here on a status
+// event is what it claims to be: an update to something the partner already holds. Best-effort: the
+// handshake has succeeded, and the status push reports a missing baseline clearly on its own.
+func (h *Handlers) seedBaselineAfterHandshake(ctx context.Context) {
+	if enabled, _ := h.kafka.Enabled(); !enabled {
+		return
+	}
+	if _, err := h.ensureKafkaBaseline(ctx); err != nil {
+		log.Warn().Err(err).Msg("baseline seed after handshake failed")
+	}
 }
 
 // EvoltInitHandshake is the opposite direction: the mock issues Token A and
@@ -147,11 +175,16 @@ func (h *Handlers) EvoltInitHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
+	h.seedBaselineAfterHandshake(ctx)
 	return ok(c, json.RawMessage(result))
 }
 
 func (h *Handlers) partnerName(ctx context.Context) (string, error) {
-	raw, err := h.mock.Get(ctx, "/admin/state")
+	return partnerNameOf(ctx, h.mock)
+}
+
+func partnerNameOf(ctx context.Context, admin *MockAdmin) (string, error) {
+	raw, err := admin.Get(ctx, "/admin/state")
 	if err != nil {
 		return "", err
 	}
@@ -167,7 +200,11 @@ func (h *Handlers) partnerName(ctx context.Context) (string, error) {
 }
 
 func (h *Handlers) partnerParty(ctx context.Context) (string, string, error) {
-	raw, err := h.mock.Get(ctx, "/admin/state")
+	return partnerPartyOf(ctx, h.mock)
+}
+
+func partnerPartyOf(ctx context.Context, admin *MockAdmin) (string, string, error) {
+	raw, err := admin.Get(ctx, "/admin/state")
 	if err != nil {
 		return "", "", err
 	}
@@ -401,6 +438,13 @@ func (h *Handlers) EvoltBatchRun(c echo.Context) error {
 		if _, err := h.mock.Post(ctx, "/admin/seed/new-batch", nil); err != nil {
 			return failFrom(c, err)
 		}
+		// Fanout partners republish too, so the cron collects a fresh batch from every registered
+		// sender — one being down only costs its own rows.
+		for _, p := range h.fanout {
+			if _, err := p.admin.Post(ctx, "/admin/seed/new-batch", nil); err != nil {
+				log.Warn().Err(err).Str("partner", p.Key).Msg("fanout new-batch failed")
+			}
+		}
 	}
 
 	result, err := h.batch.Run(ctx, c.Param("job"), req.DryRun)
@@ -462,7 +506,10 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		return fail(c, http.StatusBadRequest, "status must be a valid EVSE status", nil)
 	}
 	ctx := c.Request().Context()
-	seeded, err := h.ensureKafkaBaseline(ctx)
+	// A status event is an update to something the partner already holds — OCPI has no "PATCH
+	// creates". The baseline location is PUT at handshake time; pushing to an EVSE the partner does
+	// not hold is refused rather than silently seeded, so what the demo shows is the real contract.
+	held, err := h.partnerEvseStatuses(ctx)
 	if err != nil {
 		return failFrom(c, err)
 	}
@@ -476,6 +523,10 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		if err != nil {
 			return fail(c, http.StatusBadRequest, err.Error(), nil)
 		}
+		if _, inPartner := held[target.OCPIUID]; !inPartner {
+			return fail(c, http.StatusConflict,
+				"partner ยังไม่มีตู้ "+target.OCPIUID+" — กด Handshake ใหม่ (baseline location จะถูกส่งให้ตอนจบ)", nil)
+		}
 		if _, err := h.db.SimulateEvseOnline(ctx, target.ID, req.Status); err != nil {
 			return fail(c, http.StatusBadGateway, "charger simulate failed: "+err.Error(), nil)
 		}
@@ -483,7 +534,7 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 			return fail(c, http.StatusBadGateway, err.Error(), nil)
 		}
 		return ok(c, map[string]any{
-			"produced": true, "baseline_seeded": seeded, "simulated_status": req.Status,
+			"produced": true, "simulated_status": req.Status,
 			"charger_online": true, "evse": target.UID,
 			"note": "consumer should PATCH the mock within ~5s — watch the request log",
 		})
@@ -491,6 +542,10 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 
 	// Default path: the configured demo EVSE via ChargerDB. Flip online first so Evolt derives the
 	// picked status instead of UNKNOWN; without the simulator the event still fires with the DB's value.
+	if _, inPartner := held[h.cfg.KafkaOCPIEvseUID]; !inPartner {
+		return fail(c, http.StatusConflict,
+			"partner ยังไม่มีตู้ "+h.cfg.KafkaOCPIEvseUID+" — กด Handshake ใหม่ (baseline location จะถูกส่งให้ตอนจบ)", nil)
+	}
 	simulated := false
 	if h.charger != nil {
 		if _, err := h.charger.SimulateOnline(ctx, req.Status); err != nil {
@@ -507,7 +562,6 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 	}
 	return ok(c, map[string]any{
 		"produced":         true,
-		"baseline_seeded":  seeded,
 		"simulated_status": req.Status,
 		"charger_online":   simulated,
 		"note":             note,
@@ -566,7 +620,14 @@ func (h *Handlers) PartnerCache(c echo.Context) error {
 	if err != nil {
 		return fail(c, http.StatusBadGateway, err.Error(), nil)
 	}
-	return ok(c, map[string]any{"country_code": countryCode, "party_id": partyID, "locations": locations})
+	tariffs, err := h.db.PartnerCacheTariffs(ctx, countryCode, partyID, 25)
+	if err != nil {
+		return fail(c, http.StatusBadGateway, err.Error(), nil)
+	}
+	return ok(c, map[string]any{
+		"country_code": countryCode, "party_id": partyID,
+		"locations": locations, "tariffs": tariffs,
+	})
 }
 
 // partnerEvseStatuses maps the partner's received EVSE uid to the status it currently holds.
@@ -598,7 +659,11 @@ func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, 
 // station if the replica has none — Evolt only PATCHes EVSE status, never PUTs
 // the full location, so without a baseline every PATCH answers 2003.
 func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
-	raw, err := h.mock.Get(ctx, "/admin/received/locations")
+	return h.ensureKafkaBaselineFor(ctx, h.mock)
+}
+
+func (h *Handlers) ensureKafkaBaselineFor(ctx context.Context, admin *MockAdmin) (bool, error) {
+	raw, err := admin.Get(ctx, "/admin/received/locations")
 	if err != nil {
 		return false, err
 	}
@@ -651,6 +716,7 @@ func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
 // /credentials — so that side is cleared separately.
 func (h *Handlers) Unregister(c echo.Context) error {
 	ctx := c.Request().Context()
+	countryCode, partyID, partyErr := h.partnerParty(ctx)
 	deleted, err := h.mock.Delete(ctx, "/admin/registrations")
 	if err != nil {
 		return failFrom(c, err)
@@ -661,10 +727,20 @@ func (h *Handlers) Unregister(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	return ok(c, map[string]any{
+	out := map[string]any{
 		"registration": json.RawMessage(deleted),
 		"data_reset":   json.RawMessage(reset),
-	})
+	}
+	// Evolt offers no DELETE /credentials, so its row for this party would stay REGISTERED and block
+	// every re-handshake with 9999 — clear it here (is_self=false; cascade takes roles/endpoints/cache).
+	if h.db != nil && partyErr == nil {
+		if n, err := h.db.DeletePartnerCredentials(ctx, countryCode, partyID); err != nil {
+			out["evolt_side"] = "ลบทะเบียนฝั่ง Evolt ไม่สำเร็จ: " + err.Error()
+		} else {
+			out["evolt_credentials_deleted"] = n
+		}
+	}
+	return ok(c, out)
 }
 
 // ClearRequests empties just the partner's request log (own/received data untouched).
@@ -698,11 +774,49 @@ func (h *Handlers) Received(c echo.Context) error {
 	if kind != "locations" && kind != "tariffs" {
 		return fail(c, http.StatusBadRequest, "kind must be locations or tariffs", nil)
 	}
-	result, err := h.mock.Get(c.Request().Context(), "/admin/received/"+kind)
+	ctx := c.Request().Context()
+	result, err := h.mock.Get(ctx, "/admin/received/"+kind)
 	if err != nil {
 		return failFrom(c, err)
 	}
+	// A received tariff is just an OCPI object — which station published it only Evolt knows.
+	// Attach that origin so the panel can label each price instead of showing bare uuids.
+	if kind == "tariffs" && h.db != nil {
+		if enriched, ok2 := h.attachTariffOrigins(ctx, result); ok2 {
+			return ok(c, enriched)
+		}
+	}
 	return ok(c, json.RawMessage(result))
+}
+
+func (h *Handlers) attachTariffOrigins(ctx context.Context, result json.RawMessage) (json.RawMessage, bool) {
+	var keys struct {
+		Tariffs []struct {
+			Key string `json:"key"`
+		} `json:"tariffs"`
+	}
+	var full map[string]json.RawMessage
+	if json.Unmarshal(result, &keys) != nil || json.Unmarshal(result, &full) != nil || len(keys.Tariffs) == 0 {
+		return nil, false
+	}
+	ids := make([]string, 0, len(keys.Tariffs))
+	for _, t := range keys.Tariffs {
+		ids = append(ids, t.Key)
+	}
+	origins, err := h.db.TariffOrigins(ctx, ids)
+	if err != nil {
+		return nil, false
+	}
+	enc, err := json.Marshal(origins)
+	if err != nil {
+		return nil, false
+	}
+	full["origins"] = enc
+	merged, err := json.Marshal(full)
+	if err != nil {
+		return nil, false
+	}
+	return merged, true
 }
 
 func (h *Handlers) Requests(c echo.Context) error {
@@ -714,11 +828,55 @@ func (h *Handlers) Requests(c echo.Context) error {
 		}
 		limit = n
 	}
-	result, err := h.mock.Get(c.Request().Context(), "/admin/requests?limit="+strconv.Itoa(limit))
+	ctx := c.Request().Context()
+	result, err := h.mock.Get(ctx, "/admin/requests?limit="+strconv.Itoa(limit))
 	if err != nil {
 		return failFrom(c, err)
 	}
-	return ok(c, json.RawMessage(result))
+	rows := tagPartnerRows(result, "PLG")
+	// Fanout partners contribute their logs too — that is where "one push, three receivers" becomes
+	// visible. One of them being down must not empty the whole log.
+	for _, p := range h.fanout {
+		raw, err := p.admin.Get(ctx, "/admin/requests?limit="+strconv.Itoa(limit))
+		if err != nil {
+			continue
+		}
+		rows = append(rows, tagPartnerRows(raw, strings.ToUpper(p.Key))...)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ts > rows[j].ts })
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	merged := make([]json.RawMessage, len(rows))
+	for i, r := range rows {
+		merged[i] = r.raw
+	}
+	return ok(c, merged)
+}
+
+type taggedRow struct {
+	ts  string
+	raw json.RawMessage
+}
+
+func tagPartnerRows(result json.RawMessage, partner string) []taggedRow {
+	var rows []map[string]json.RawMessage
+	if json.Unmarshal(result, &rows) != nil {
+		return nil
+	}
+	out := make([]taggedRow, 0, len(rows))
+	for _, r := range rows {
+		enc, _ := json.Marshal(partner)
+		r["partner"] = enc
+		var ts string
+		_ = json.Unmarshal(r["ts"], &ts)
+		raw, err := json.Marshal(r)
+		if err != nil {
+			continue
+		}
+		out = append(out, taggedRow{ts: ts, raw: raw})
+	}
+	return out
 }
 
 func (h *Handlers) Reset(c echo.Context) error {
@@ -764,7 +922,7 @@ func (h *Handlers) BrowseTable(c echo.Context) error {
 		}
 		page = n
 	}
-	res, err := h.db.Query(c.Request().Context(), c.Param("table"), c.QueryParam("col"), c.QueryParam("q"), page)
+	res, err := h.db.Query(c.Request().Context(), c.Param("table"), c.QueryParam("db"), c.QueryParam("col"), c.QueryParam("q"), page)
 	if err != nil {
 		return fail(c, http.StatusBadRequest, err.Error(), nil)
 	}

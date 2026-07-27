@@ -60,6 +60,9 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.POST("/push/tariff", h.PushTariff)
 	api.DELETE("/push/tariff/:tariff_id", h.DeleteTariffPush)
 	api.POST("/pull/:kind", h.PartnerPull)
+	api.GET("/fanout/state", h.FanoutState)
+	api.POST("/fanout/:partner/handshake", h.FanoutHandshake)
+	api.POST("/fanout/:partner/unregister", h.FanoutUnregister)
 	api.GET("/evolt/mirror", h.EvoltMirror)
 	api.POST("/evolt/seed", h.InitEvolt)
 	api.GET("/tables", h.Tables)
@@ -72,20 +75,31 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.POST("/evolt/evse-status-event", h.EvoltEvseStatusEvent)
 	api.POST("/reset", h.Reset)
 
-	proxy, err := ocpiProxy(cfg.MockBaseURL)
+	proxy, err := ocpiProxy(cfg.MockBaseURL, "")
 	if err != nil {
 		return nil, err
 	}
 	e.Any("/ocpi/*", proxy)
+
+	// Fanout partners share the one public hostname under a path prefix: Evolt calls
+	// /vct/ocpi/... and the proxy strips the prefix before handing it to that instance.
+	for _, m := range cfg.FanoutMocks {
+		p, err := ocpiProxy(m.URL, m.PathPrefix)
+		if err != nil {
+			return nil, err
+		}
+		e.Any(m.PathPrefix+"/ocpi/*", p)
+	}
 
 	return e, nil
 }
 
 // ocpiProxy forwards Evolt's OCPI callbacks verbatim to the mock, so a single
 // public hostname serves the UI, the demo API and the partner's OCPI surface.
+// stripPrefix carves that hostname up between instances ("/vct" → VoltCity).
 // Nothing about the request is logged here beyond method/path/status — the
 // Authorization header passes through untouched and unrecorded.
-func ocpiProxy(mockBaseURL string) (echo.HandlerFunc, error) {
+func ocpiProxy(mockBaseURL, stripPrefix string) (echo.HandlerFunc, error) {
 	target, err := url.Parse(mockBaseURL)
 	if err != nil {
 		return nil, err
@@ -95,6 +109,9 @@ func ocpiProxy(mockBaseURL string) (echo.HandlerFunc, error) {
 	rp.Director = func(req *http.Request) {
 		director(req)
 		req.Host = target.Host
+		if stripPrefix != "" {
+			req.URL.Path = strings.TrimPrefix(req.URL.Path, stripPrefix)
+		}
 	}
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Warn().Str("method", r.Method).Str("path", r.URL.Path).Msg("ocpi proxy: mock unreachable")

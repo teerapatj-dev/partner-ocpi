@@ -45,7 +45,13 @@ func main() {
 
 	var browser *demo.DBBrowser
 	if cfg.EvoltDBDSN != "" || cfg.PartnerDBDSN != "" {
-		browser, err = demo.NewDBBrowser(ctx, cfg.EvoltDBDSN, cfg.PartnerDBDSN, cfg.KafkaStationID)
+		var altDSNs [][2]string
+		for _, m := range cfg.FanoutMocks {
+			if m.DBDSN != "" {
+				altDSNs = append(altDSNs, [2]string{m.Key, m.DBDSN})
+			}
+		}
+		browser, err = demo.NewDBBrowser(ctx, cfg.EvoltDBDSN, cfg.PartnerDBDSN, cfg.KafkaStationID, altDSNs)
 		if err != nil {
 			log.Warn().Err(err).Msg("table browser off — cannot reach a configured DB")
 			browser = nil

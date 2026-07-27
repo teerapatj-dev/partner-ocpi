@@ -234,6 +234,11 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
       </div>
       <div class="rpanel out"><h3>สถานะทะเบียน <span class="rtag out">ผลลัพธ์</span></h3><div id="res-hs-out"></div></div>
     </div>
+    <div class="flow" style="margin-top:14px">
+      <h3>🌐 Fanout partners <span class="cardtag">multi-partner</span></h3>
+      <p class="mini">VoltCity/ChargeX ลงทะเบียนค้างไว้ → ทุก push จาก Evolt (location/status/tariff) จะยิงถึง<b>ทุกเจ้า</b>ที่ REGISTERED · ดูผลที่แท็บ Log (คอลัมน์ partner)</p>
+      <div id="fanout-rows"><div class="empty">กำลังโหลด…</div></div>
+    </div>
   </section>
 
   <!-- ===================== LOCATION ===================== -->
@@ -378,6 +383,13 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <button data-v="location" onclick="setLogFilter('mod','location',this)">location</button>
         <button data-v="tariff" onclick="setLogFilter('mod','tariff',this)">tariff</button>
       </span>
+      <span class="mini" style="color:var(--muted)">partner:</span>
+      <span class="seg" id="lf-partner">
+        <button class="on" data-v="all" onclick="setLogFilter('partner','all',this)">ทั้งหมด</button>
+        <button data-v="PLG" onclick="setLogFilter('partner','PLG',this)">PLG</button>
+        <button data-v="VCT" onclick="setLogFilter('partner','VCT',this)">VCT</button>
+        <button data-v="CHX" onclick="setLogFilter('partner','CHX',this)">CHX</button>
+      </span>
       <span class="mini" style="color:var(--muted)">ทิศ:</span>
       <span class="seg" id="lf-dir">
         <button class="on" data-v="all" onclick="setLogFilter('dir','all',this)">ทั้งหมด</button>
@@ -388,7 +400,7 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
     </div>
     <div class="counts" id="counts"></div>
     <div class="logwrap"><table id="log">
-      <thead><tr><th>เวลา (ไทย)</th><th>module</th><th>ทิศ</th><th>method</th><th>path</th><th>HTTP</th><th>OCPI</th><th>คู่สนทนา</th></tr></thead>
+      <thead><tr><th>เวลา (ไทย)</th><th>partner</th><th>module</th><th>ทิศ</th><th>method</th><th>path</th><th>HTTP</th><th>OCPI</th><th>คู่สนทนา</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -706,7 +718,10 @@ async function refreshStationEvses(){
     const sel=$('sel-push-evse');if(!sel)return;
     if(!j.ok||!j.data){sel.innerHTML='<option value="">(ตั้ง EVOLT_DB_DSN)</option>';return}
     const keep=sel.value;sel.innerHTML='';
-    j.data.forEach(e=>sel.add(new Option(`${e.ocpi_uid} · partner: ${e.in_partner?e.partner_status:'ยังไม่มี'} · evolt: ${e.ocpp_status}`,e.id)));
+    // PATCH คืออัปเดตของที่ partner ถืออยู่ — ตู้ที่ partner ยังไม่มีจึงไม่ใช่เป้าให้เลือก
+    const held=j.data.filter(e=>e.in_partner);
+    if(!held.length){sel.innerHTML='<option value="">(partner ยังไม่มีตู้ — กด Handshake ก่อน)</option>';return}
+    held.forEach(e=>sel.add(new Option(`${e.ocpi_uid} · partner: ${e.partner_status} · evolt: ${e.ocpp_status}`,e.id)));
     if(keep)sel.value=keep;
   }catch(e){}
 }
@@ -795,13 +810,16 @@ async function refreshPartnerData(){
     });
     $('res-loc-in').innerHTML=lh.join('');
     // tariffs -> res-trf-in
-    const th=[];const tariffs=(trfs.data||{}).tariffs||[];
+    const th=[];const tariffs=(trfs.data||{}).tariffs||[];const origins=(trfs.data||{}).origins||{};
     if(!tariffs.length)th.push('<div class="empty">ยังไม่มี tariff ของ Evolt ที่นี่<br>กด Roaming In · Tariff (สั่ง push)</div>');
     tariffs.forEach(t=>{
       const p=asObj(t.payload),f=changed('rtrf:'+t.key,JSON.stringify(p.elements||[])+t.last_updated)?' flash':'';
       const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
+      const o=origins[t.key];
+      const origin=o?`<div class="when">🏢 ${esc(o.station_name||o.station_id)} · scope <b>${esc(o.scope)}</b></div>`:'';
       th.push(`<div class="item${f}"><div class="top"><span class="name">${esc(alt||p.id||t.key)}</span>`+
         `<span class="when"><button class="ghost" onclick='showJSON("received tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
+        origin+
         priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
         `<div class="when mono" style="margin-top:6px">${esc(p.id||t.key)}</div></div>`);
     });
@@ -842,20 +860,38 @@ async function refreshMirror(){
     }else if(tid){
       th.push(`<div class="empty">Evolt ยังไม่มี tariff <span class="mono">${esc(tid)}</span><br>กด Roaming Out · Tariff (PUT)</div>`);
     }
+    th.push(...partnerTariffCards());
     $('res-trf-out').innerHTML=th.join('');
   }catch(e){}
 }
 
 /* Evolt's partner cache, rendered like the mock's side so the two directions read the same. Kept in
    a module-level cache: it polls on its own clock, the mirror redraws on its own. */
-let partnerCache=[];
+let partnerCache=[],partnerCacheTrf=[];
 async function refreshPartnerCache(){
   try{
     const r=await api('/api/demo/evolt/partner-cache');const j=await r.json();
     if(!j.ok)return;
     partnerCache=(j.data||{}).locations||[];
+    partnerCacheTrf=(j.data||{}).tariffs||[];
     if($('res-loc-out')&&!$('location-out').classList.contains('hidden'))refreshMirror();
+    if($('res-trf-out')&&!$('tariff-out').classList.contains('hidden'))refreshMirror();
   }catch(e){}
+}
+function partnerTariffCards(){
+  if(!partnerCacheTrf.length)return ['<div class="empty">Evolt ยังไม่มีราคาของ partner<br>กด PUT (upsert) หรือ tariffs_pull</div>'];
+  return partnerCacheTrf.map(t=>{
+    const p=asObj(t.raw);
+    const alt=(p.tariff_alt_text||[]).map(x=>x.text).join(' / ');
+    const f=changed('pct:'+t.tariff_id,t.synced_at+(t.deleted_at||''))?' flash':'';
+    const del=t.deleted_at?`<span class="chip st-REMOVED"><b>ลบแล้ว</b><span class="uid">${esc(t.deleted_at)}</span></span>`:'';
+    return `<div class="item${f}"><div class="top"><span class="name">${esc(alt||t.tariff_id)}</span>`+
+      `<span class="when"><button class="ghost" onclick='showJSON("evolt cached partner tariff",${JSON.stringify(p).replace(/'/g,"&#39;")})'>ดู JSON</button></span></div>`+
+      (del?`<div class="chips">${del}</div>`:'')+
+      priceLines(p).map(x=>`<div class="price">${x}</div>`).join('')+
+      `<div class="when" style="margin-top:6px">รับเข้า: ${esc(ago(t.synced_at))} <span class="mono">${esc(thTime(t.synced_at))}</span></div>`+
+      `<div class="when mono">${esc(t.tariff_id)}</div></div>`;
+  });
 }
 function partnerCacheCards(){
   if(!partnerCache.length)return ['<div class="empty">Evolt ยังไม่มีตู้ของ partner<br>กด PUT / PATCH หรือ locations_pull</div>'];
@@ -873,23 +909,53 @@ function partnerCacheCards(){
   });
 }
 
+// ---- fanout partners ----
+async function refreshFanout(){
+  const box=$('fanout-rows');if(!box)return;
+  try{
+    const r=await api('/api/demo/fanout/state');const j=await r.json();
+    if(!j.ok){box.innerHTML='<div class="empty">'+esc(j.error||'โหลดไม่ได้')+'</div>';return}
+    if(!(j.data||[]).length){box.innerHTML='<div class="empty">ไม่ได้ตั้งค่า MOCK_VCT_URL / MOCK_CHX_URL</div>';return}
+    box.innerHTML=j.data.map(p=>{
+      if(!p.reachable)return `<div class="act"><span class="lbl mono">${esc(p.key)}</span><span class="mini">mock ไม่ตอบ</span></div>`;
+      const both=p.mock_status==='REGISTERED'&&p.evolt_registered;
+      const badge=both?'<span class="chip st-AVAILABLE"><b>REGISTERED</b></span>'
+        :`<span class="chip st-UNKNOWN"><b>${esc(p.mock_status||'ยังไม่ลงทะเบียน')}</b><span class="uid">evolt:${p.evolt_registered?'✓':'✗'}</span></span>`;
+      return `<div class="act"><span class="lbl">${esc(p.name)} <span class="mono">${esc(p.party)}</span></span>${badge}`+
+        `<button class="in" onclick="fanoutAct('${esc(p.key)}','handshake',this)">🤝 Handshake</button>`+
+        `<button class="ghost" onclick="if(confirm('ยกเลิกทะเบียน ${esc(p.name)} + ล้างข้อมูลฝั่ง partner?'))fanoutAct('${esc(p.key)}','unregister',this)">ยกเลิก</button></div>`;
+    }).join('');
+  }catch(e){}
+}
+async function fanoutAct(key,action,btn){
+  const html=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>'+html;
+  try{
+    const r=await api('/api/demo/fanout/'+encodeURIComponent(key)+'/'+action,{method:'POST'});
+    const j=await r.json();
+    if(!j.ok)alert(action+' '+key+' ล้มเหลว: '+(j.error||''));
+  }catch(e){alert(String(e))}
+  btn.disabled=false;btn.innerHTML=html;
+  refreshFanout();refreshLog();
+}
+
 // ---- request log ----
-let logRows=[],logFilter={mod:'all',dir:'all'};
+let logRows=[],logFilter={mod:'all',dir:'all',partner:'all'};
 function moduleOf(p){p=p||'';if(/\/tariffs/.test(p))return 'tariff';if(/\/locations/.test(p))return 'location';
   if(/\/credentials|\/versions|\/2\.2\.1/.test(p))return 'handshake';return 'other';}
 function setLogFilter(kind,v,btn){
   logFilter[kind]=v;btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderLog();
 }
 function renderLog(){
-  const rows=logRows.filter(e=>(logFilter.mod==='all'||moduleOf(e.path)===logFilter.mod)&&(logFilter.dir==='all'||e.direction===logFilter.dir));
+  const rows=logRows.filter(e=>(logFilter.mod==='all'||moduleOf(e.path)===logFilter.mod)&&(logFilter.dir==='all'||e.direction===logFilter.dir)&&(logFilter.partner==='all'||(e.partner||'PLG')===logFilter.partner));
   $('log').querySelector('tbody').innerHTML=rows.map(e=>{
     const okc=e.ocpi_status_code===1000?'code-ok':(e.ocpi_status_code?'code-bad':'');
     return `<tr onclick='showJSON("request log",${JSON.stringify(e).replace(/'/g,"&#39;")})'><td>${esc(thTime(e.ts))}</td>`+
+      `<td><span class="mtag">${esc(e.partner||'PLG')}</span></td>`+
       `<td><span class="mtag">${esc(moduleOf(e.path))}</span></td>`+
       `<td class="dir-${e.direction}">${e.direction==='in'?'🟢 in':'🟣 out'}</td>`+
       `<td>${esc(e.method)}</td><td class="path">${esc(e.path)}</td><td>${e.http_status||''}</td>`+
       `<td class="${okc}">${e.ocpi_status_code||''}</td><td>${esc(e.counterparty||'')}</td></tr>`;
-  }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:14px">— ไม่มี log ตามตัวกรอง —</td></tr>';
+  }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">— ไม่มี log ตามตัวกรอง —</td></tr>';
 }
 async function refreshLog(){
   try{
@@ -907,7 +973,7 @@ async function clearLog(btn){
 }
 
 // ---- table browser ----
-let tblMenu=null,tblSide='evolt',tblCur=null,tblCol='',tblQ='',tblPage=1;
+let tblMenu=null,tblSide='evolt',tblCur=null,tblCurSide='evolt',tblDb='plg',tblCol='',tblQ='',tblPage=1;
 async function loadTables(){
   try{
     const r=await api('/api/demo/tables');const j=await r.json();
@@ -920,11 +986,19 @@ function pickSide(side,btn){
 }
 function renderTableList(){
   if(!tblMenu)return;
-  $('tbl-list').innerHTML=(tblMenu[tblSide]||[]).map(t=>
+  const dbs=tblMenu.partner_dbs||[];
+  const pills=(tblSide==='partner'&&dbs.length>1)?
+    `<div style="display:flex;gap:4px;margin:0 0 6px">`+dbs.map(k=>
+      `<button class="${k===tblDb?'on':''}" style="flex:1;font-size:11px" onclick='pickDb(${JSON.stringify(k)})'>🗄 ${esc(k.toUpperCase())}</button>`).join('')+`</div>`:'';
+  $('tbl-list').innerHTML=pills+(tblMenu[tblSide]||[]).map(t=>
     `<button class="${t.table===tblCur?'on':''}" onclick='openTable(${JSON.stringify(t.table)})'>${esc(t.table)}</button>`).join('');
 }
+function pickDb(k){
+  tblDb=k;renderTableList();
+  if(tblCur&&tblCurSide==='partner'){tblPage=1;loadTablePage();}
+}
 function openTable(name){
-  tblCur=name;tblCol='';tblQ='';tblPage=1;renderTableList();
+  tblCur=name;tblCurSide=tblSide;tblCol='';tblQ='';tblPage=1;renderTableList();
   const cols=((tblMenu[tblSide]||[]).find(t=>t.table===name)||{}).columns||[];
   $('tbl-bar').innerHTML=`<select id="f-col"><option value="">— เลือก column ที่จะค้นหา —</option>`+
     cols.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')+`</select>`+
@@ -939,6 +1013,7 @@ function clearSearch(){if($('f-col'))$('f-col').value='';if($('f-q'))$('f-q').va
 async function loadTablePage(){
   if(!tblCur)return;
   const qs=new URLSearchParams({page:tblPage});if(tblCol&&tblQ){qs.set('col',tblCol);qs.set('q',tblQ)}
+  if(tblCurSide==='partner'&&tblDb!=='plg')qs.set('db',tblDb);
   try{
     const r=await api(`/api/demo/table/${encodeURIComponent(tblCur)}?${qs}`);const j=await r.json();
     if(!j.ok){$('tbl-grid').innerHTML=`<tr><td style="color:var(--red);padding:10px">${esc(j.error||'error')}</td></tr>`;$('tbl-page').innerHTML='';return}
@@ -946,7 +1021,7 @@ async function loadTablePage(){
     $('tbl-grid').innerHTML=`<thead><tr>${d.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>`+
       `<tbody>`+(d.rows.length?d.rows.map(row=>`<tr>${row.map(v=>v===null?'<td class="nullv">∅</td>':`<td title="${esc(v)}">${esc(v)}</td>`).join('')}</tr>`).join('')
         :`<tr><td colspan="${d.columns.length}" style="text-align:center;color:var(--muted);padding:14px">— ไม่มีแถว —</td></tr>`)+`</tbody>`;
-    if($('tbl-cnt'))$('tbl-cnt').textContent=`${d.total} แถว`;
+    if($('tbl-cnt'))$('tbl-cnt').textContent=`${d.total} แถว`+(d.db?` · ${d.db.toUpperCase()}`:'');
     $('tbl-page').innerHTML=`<button class="ghost" ${d.page<=1?'disabled':''} onclick="tblPage=${d.page-1};loadTablePage()">← ก่อน</button>`+
       `<span>หน้า ${d.page} / ${d.pages}</span>`+
       `<button class="ghost" ${d.page>=d.pages?'disabled':''} onclick="tblPage=${d.page+1};loadTablePage()">ถัดไป →</button>`+
@@ -962,6 +1037,7 @@ setInterval(refreshState,3000);
 setInterval(refreshLog,3000);
 setInterval(refreshPartnerData,2500);
 setInterval(refreshPartnerCache,2500);
+refreshFanout();setInterval(refreshFanout,6000);
 setInterval(refreshMirror,5000);
 setInterval(refreshOwn,15000);
 </script>

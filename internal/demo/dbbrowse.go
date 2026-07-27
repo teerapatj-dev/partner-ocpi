@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -21,7 +22,9 @@ import (
 // file (never the request); request/scope values are bound as parameters.
 type DBBrowser struct {
 	evolt         *pgxpool.Pool
-	partner       *pgxpool.Pool
+	partner       *pgxpool.Pool            // PLG — the interactive partner, and the default
+	partnerAlt    map[string]*pgxpool.Pool // fanout partners' own DBs, keyed "vct"/"chx"
+	partnerKeys   []string                 // menu order: "plg" first, then alt keys as configured
 	demoStationID string
 	tables        map[string]tableSpec // browsableTables + any demo-scoped entries
 	scopeArgs     map[string][]any     // leading bound args a scoped table's WHERE fragment consumes
@@ -133,8 +136,11 @@ var (
 	partnerTableOrder = []string{"registrations", "partner_endpoints", "own_locations", "own_tariffs", "received_locations", "received_evses", "received_connectors", "received_tariffs", "request_log"}
 )
 
-func NewDBBrowser(ctx context.Context, evoltDSN, partnerDSN, demoStationID string) (*DBBrowser, error) {
-	b := &DBBrowser{demoStationID: demoStationID, tables: map[string]tableSpec{}, scopeArgs: map[string][]any{}}
+// altPartnerDSNs maps a fanout partner key ("vct") to that mock's own DSN; each becomes a switchable
+// database on the partner side of the browser. Order of keys decides the menu order after "plg".
+func NewDBBrowser(ctx context.Context, evoltDSN, partnerDSN, demoStationID string, altPartnerDSNs [][2]string) (*DBBrowser, error) {
+	b := &DBBrowser{demoStationID: demoStationID, tables: map[string]tableSpec{}, scopeArgs: map[string][]any{},
+		partnerAlt: map[string]*pgxpool.Pool{}}
 	for k, v := range browsableTables {
 		b.tables[k] = v
 	}
@@ -157,12 +163,24 @@ func NewDBBrowser(ctx context.Context, evoltDSN, partnerDSN, demoStationID strin
 	if partnerDSN != "" {
 		pool, err := openPool(ctx, partnerDSN)
 		if err != nil {
-			if b.evolt != nil {
-				b.evolt.Close()
-			}
+			b.Close()
 			return nil, fmt.Errorf("partner db: %w", err)
 		}
 		b.partner = pool
+		b.partnerKeys = append(b.partnerKeys, "plg")
+	}
+	for _, kv := range altPartnerDSNs {
+		key, dsn := kv[0], kv[1]
+		if dsn == "" || key == "" || key == "plg" {
+			continue
+		}
+		pool, err := openPool(ctx, dsn)
+		if err != nil {
+			b.Close()
+			return nil, fmt.Errorf("partner db %s: %w", key, err)
+		}
+		b.partnerAlt[key] = pool
+		b.partnerKeys = append(b.partnerKeys, key)
 	}
 	return b, nil
 }
@@ -197,19 +215,34 @@ func (b *DBBrowser) Close() {
 	if b.partner != nil {
 		b.partner.Close()
 	}
+	for _, p := range b.partnerAlt {
+		p.Close()
+	}
 }
 
-func (b *DBBrowser) poolFor(side string) *pgxpool.Pool {
+// poolFor picks the pool a query runs on. db selects among partner databases ("" = PLG); the Evolt
+// side has exactly one database, so db is ignored there.
+func (b *DBBrowser) poolFor(side, db string) (*pgxpool.Pool, error) {
 	if side == "evolt" {
-		return b.evolt
+		return b.evolt, nil
 	}
-	return b.partner
+	if db == "" || db == "plg" {
+		return b.partner, nil
+	}
+	pool, ok := b.partnerAlt[db]
+	if !ok {
+		return nil, fmt.Errorf("unknown partner db %q", db)
+	}
+	return pool, nil
 }
 
 // TableMenu is the whitelist the UI renders as a menu — table name + its searchable columns.
+// PartnerDBs lists the partner databases the browser can switch between ("plg" first); a single-DB
+// setup gets ["plg"] and the UI hides the switch.
 type TableMenu struct {
-	Evolt   []TableInfo `json:"evolt"`
-	Partner []TableInfo `json:"partner"`
+	Evolt      []TableInfo `json:"evolt"`
+	Partner    []TableInfo `json:"partner"`
+	PartnerDBs []string    `json:"partner_dbs"`
 }
 
 type TableInfo struct {
@@ -229,7 +262,7 @@ func (b *DBBrowser) Menu() TableMenu {
 		}
 		return out
 	}
-	return TableMenu{Evolt: build(evoltTableOrder), Partner: build(partnerTableOrder)}
+	return TableMenu{Evolt: build(evoltTableOrder), Partner: build(partnerTableOrder), PartnerDBs: b.partnerKeys}
 }
 
 type BrowseResult struct {
@@ -241,12 +274,14 @@ type BrowseResult struct {
 	Page     int         `json:"page"`
 	Pages    int         `json:"pages"`
 	PageSize int         `json:"page_size"`
+	DB       string      `json:"db,omitempty"` // which partner database answered ("plg"/"vct"/"chx"); empty on the Evolt side
 }
 
 // Query returns one page of a whitelisted table. filterCol must be one of the table's own columns;
 // filterVal is bound as a parameter, as is any scope arg. Every column is cast to text so the result
-// is a uniform grid and no pgtype decoding surprises leak through.
-func (b *DBBrowser) Query(ctx context.Context, table, filterCol, filterVal string, page int) (*BrowseResult, error) {
+// is a uniform grid and no pgtype decoding surprises leak through. db picks which partner's database
+// answers a partner-side table ("" = PLG); it never selects the SQL, only the pool.
+func (b *DBBrowser) Query(ctx context.Context, table, db, filterCol, filterVal string, page int) (*BrowseResult, error) {
 	spec, ok := b.tables[table]
 	if !ok {
 		return nil, fmt.Errorf("unknown table")
@@ -257,7 +292,10 @@ func (b *DBBrowser) Query(ctx context.Context, table, filterCol, filterVal strin
 	if spec.join != nil && filterCol == spec.join.column {
 		return nil, fmt.Errorf("ค้นหาคอลัมน์นี้ไม่ได้ — ค่ามาจาก DB อีกฝั่ง ให้ค้นด้วย %s แทน", spec.join.key)
 	}
-	pool := b.poolFor(spec.side)
+	pool, err := b.poolFor(spec.side, db)
+	if err != nil {
+		return nil, err
+	}
 	if pool == nil {
 		return nil, fmt.Errorf("%s database not configured", spec.side)
 	}
@@ -333,15 +371,22 @@ func (b *DBBrowser) Query(ctx context.Context, table, filterCol, filterVal strin
 		_ = b.fillCrossDB(ctx, spec, out)
 	}
 
-	return &BrowseResult{
+	res := &BrowseResult{
 		Table: table, Side: spec.side, Columns: spec.columns,
 		Rows: out, Total: total, Page: page, Pages: pages, PageSize: browsePageSize,
-	}, nil
+	}
+	if spec.side == "partner" {
+		res.DB = db
+		if res.DB == "" {
+			res.DB = "plg"
+		}
+	}
+	return res, nil
 }
 
 func (b *DBBrowser) fillCrossDB(ctx context.Context, spec tableSpec, rows [][]*string) error {
-	pool := b.poolFor(spec.join.side)
-	if pool == nil {
+	pool, err := b.poolFor(spec.join.side, "")
+	if err != nil || pool == nil {
 		return fmt.Errorf("%s database not configured", spec.join.side)
 	}
 	keyIdx, valIdx := indexOf(spec.columns, spec.join.key), indexOf(spec.columns, spec.join.column)
@@ -488,6 +533,103 @@ type PartnerCacheEvse struct {
 	UID         string `json:"uid"`
 	Status      string `json:"status"`
 	LastUpdated string `json:"last_updated"`
+}
+
+// DeletePartnerCredentials removes this partner's registration from Evolt; roles, endpoints and the
+// ocpi_partner_* cache follow by FK cascade. Evolt has no DELETE /credentials endpoint (OCPI §7 gap),
+// so without this a re-handshake for a party whose row is still REGISTERED answers 9999 forever.
+// The is_self=false guard is non-negotiable — the self row died to its absence once already.
+func (b *DBBrowser) DeletePartnerCredentials(ctx context.Context, countryCode, partyID string) (int, error) {
+	if b.evolt == nil {
+		return 0, fmt.Errorf("evolt database not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	tag, err := b.evolt.Exec(ctx, `
+		DELETE FROM ocpi_credentials
+		WHERE is_self = false AND id IN (
+			SELECT credentials_id FROM ocpi_credentials_roles
+			WHERE country_code = $1 AND party_id = $2)`, countryCode, partyID)
+	if err != nil {
+		return 0, fmt.Errorf("delete partner credentials: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// TariffOrigin names the station behind a materialized tariff. The OCPI Tariff object carries no
+// station at all — resolving against evolt_ocpi_tariff (+ stations, read-only) is the only way a
+// panel can say "this price belongs to Megabangna, DC side".
+type TariffOrigin struct {
+	StationID   string `json:"station_id"`
+	StationName string `json:"station_name"`
+	Scope       string `json:"scope"`
+}
+
+func (b *DBBrowser) TariffOrigins(ctx context.Context, ids []string) (map[string]TariffOrigin, error) {
+	out := map[string]TariffOrigin{}
+	if b.evolt == nil || len(ids) == 0 {
+		return out, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	rows, err := b.evolt.Query(ctx, `
+		SELECT t.id::text, t.station_id::text, COALESCE(s.name,''), COALESCE(t.scope,'')
+		FROM evolt_ocpi_tariff t
+		LEFT JOIN stations s ON s.id = t.station_id
+		WHERE t.id::text = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("resolve tariff origins: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var o TariffOrigin
+		if err := rows.Scan(&id, &o.StationID, &o.StationName, &o.Scope); err != nil {
+			return nil, err
+		}
+		out[id] = o
+	}
+	return out, rows.Err()
+}
+
+// PartnerCacheTariff is one partner tariff as Evolt cached it; Raw is the stored OCPI object so the
+// panel can price it the same way the mock's side does.
+type PartnerCacheTariff struct {
+	TariffID    string          `json:"tariff_id"`
+	Raw         json.RawMessage `json:"raw"`
+	LastUpdated string          `json:"last_updated"`
+	SyncedAt    string          `json:"synced_at"`
+	DeletedAt   string          `json:"deleted_at,omitempty"`
+}
+
+func (b *DBBrowser) PartnerCacheTariffs(ctx context.Context, countryCode, partyID string, limit int) ([]PartnerCacheTariff, error) {
+	if b.evolt == nil {
+		return nil, fmt.Errorf("evolt database not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	rows, err := b.evolt.Query(ctx, `
+		SELECT tariff_id, COALESCE(raw, '{}'::jsonb),
+		       to_char(last_updated AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),
+		       to_char(synced_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'),
+		       COALESCE(to_char(deleted_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD"T"HH24:MI:SS'), '')
+		FROM ocpi_partner_tariffs
+		WHERE country_code = $1 AND party_id = $2
+		ORDER BY synced_at DESC
+		LIMIT $3`, countryCode, partyID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read partner tariffs: %w", err)
+	}
+	defer rows.Close()
+	out := []PartnerCacheTariff{}
+	for rows.Next() {
+		var t PartnerCacheTariff
+		if err := rows.Scan(&t.TariffID, &t.Raw, &t.LastUpdated, &t.SyncedAt, &t.DeletedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 // PartnerCacheLocations reads what Evolt holds for one partner. Neither table carries a soft-delete

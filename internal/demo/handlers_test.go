@@ -437,7 +437,7 @@ func TestOcpiProxyForwardsVerbatim(t *testing.T) {
 	}))
 	t.Cleanup(backend.Close)
 
-	handler, err := ocpiProxy(backend.URL)
+	handler, err := ocpiProxy(backend.URL, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestOcpiProxyForwardsVerbatim(t *testing.T) {
 }
 
 func TestOcpiProxyMockDown(t *testing.T) {
-	handler, err := ocpiProxy("http://127.0.0.1:1")
+	handler, err := ocpiProxy("http://127.0.0.1:1", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,7 +538,7 @@ func TestEnsureKafkaBaseline(t *testing.T) {
 }
 
 func TestOcpiProxyRejectsDotSegments(t *testing.T) {
-	handler, err := ocpiProxy("http://127.0.0.1:1")
+	handler, err := ocpiProxy("http://127.0.0.1:1", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// FanoutMock is one extra partner instance the demo can register as a fanout target. PathPrefix is
+// the public-URL segment its OCPI callbacks are proxied under (e.g. "/vct" → /vct/ocpi/*).
+type FanoutMock struct {
+	Key        string // short id used in routes and labels: "vct", "chx"
+	URL        string // in-network base URL of that mock instance
+	AdminKey   string
+	PathPrefix string
+	DBDSN      string // that instance's own Postgres — read-only table browser; "" = browser shows PLG only
+}
+
 // Config drives the demo orchestrator. Only the mock side is mandatory: every
 // Evolt URL may be absent (dev cluster down, or local run against stubs) and
 // the matching endpoints then fail with an explanation instead of at startup.
@@ -16,6 +26,11 @@ type Config struct {
 	PublicBaseURL string
 	MockBaseURL   string
 	MockAdminKey  string
+
+	// FanoutMocks are additional partner instances (VoltCity/ChargeX) kept registered so a push shows
+	// the fanout hitting several parties at once. The demo drives them only through handshake /
+	// unregister — PLG stays the interactive one. Empty list = single-partner demo as before.
+	FanoutMocks []FanoutMock
 
 	EvoltVersionsURL string
 	EvoltOrchURL     string
@@ -62,6 +77,25 @@ type Config struct {
 	Timeout        time.Duration
 }
 
+// fanoutMocks reads the optional VCT/CHX instances. A partner with no URL set is simply absent —
+// the demo then runs single-partner exactly as before.
+func fanoutMocks() []FanoutMock {
+	var out []FanoutMock
+	for _, m := range []FanoutMock{
+		{Key: "vct", URL: strings.TrimRight(os.Getenv("MOCK_VCT_URL"), "/"),
+			AdminKey: getenv("MOCK_VCT_ADMIN_KEY", "vct-admin-key"), PathPrefix: "/vct",
+			DBDSN: os.Getenv("MOCK_VCT_DB_DSN")},
+		{Key: "chx", URL: strings.TrimRight(os.Getenv("MOCK_CHX_URL"), "/"),
+			AdminKey: getenv("MOCK_CHX_ADMIN_KEY", "chx-admin-key"), PathPrefix: "/chx",
+			DBDSN: os.Getenv("MOCK_CHX_DB_DSN")},
+	} {
+		if m.URL != "" {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 func Load() (Config, error) {
 	cfg := Config{
 		Port:             getenv("DEMO_PORT", "8080"),
@@ -85,6 +119,7 @@ func Load() (Config, error) {
 		KafkaOCPIEvseUID: os.Getenv("DEMO_KAFKA_OCPI_EVSE_UID"),
 		EvoltDBDSN:       os.Getenv("EVOLT_DB_DSN"),
 		PartnerDBDSN:     os.Getenv("PARTNER_DB_DSN"),
+		FanoutMocks:      fanoutMocks(),
 		BatchJobsDir:     os.Getenv("BATCH_JOBS_DIR"),
 		BatchAppEnv:      getenv("BATCH_APP_ENV", "dev"),
 		BatchTokenKey:    os.Getenv("BATCH_TOKEN_ENCRYPTION_KEY"),

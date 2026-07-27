@@ -22,6 +22,14 @@ services:
       EVOLT_DB_DSN: ${EVOLT_DB_DSN:-}
       # Mock's own Postgres (same DB the plugsiam service uses) — read-only table browser only.
       PARTNER_DB_DSN: ${PARTNER_DB_DSN:-postgres://mock:mock@postgres:5432/partner_plg?sslmode=disable}
+      # Fanout partners: registered once, then every Evolt push fans out to them too. Their OCPI
+      # surface shares the public hostname under /vct and /chx (see plugsiam-style BASE_URL below).
+      MOCK_VCT_URL: ${MOCK_VCT_URL:-http://voltcity:8080}
+      MOCK_VCT_ADMIN_KEY: ${MOCK_VCT_ADMIN_KEY:-vct-admin-key}
+      MOCK_VCT_DB_DSN: ${MOCK_VCT_DB_DSN:-postgres://mock:mock@postgres:5432/partner_vct?sslmode=disable}
+      MOCK_CHX_URL: ${MOCK_CHX_URL:-http://chargex:8080}
+      MOCK_CHX_ADMIN_KEY: ${MOCK_CHX_ADMIN_KEY:-chx-admin-key}
+      MOCK_CHX_DB_DSN: ${MOCK_CHX_DB_DSN:-postgres://mock:mock@postgres:5432/partner_chx?sslmode=disable}
       EVOLT_ORCH_API_KEY: ${EVOLT_ORCH_API_KEY:-}
       EVOLT_ROAMING_API_KEY: ${EVOLT_ROAMING_API_KEY:-}
       DEMO_ALLOWED_STATION_IDS: ${DEMO_ALLOWED_STATION_IDS:-}
@@ -78,4 +86,15 @@ services:
   plugsiam:
     environment:
       BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:9101}
+      OUTBOUND_TIMEOUT_SECONDS: ${MOCK_OUTBOUND_TIMEOUT_SECONDS:-45}
+
+  # Fanout partners advertise the same tunnel under their path prefix; the demo proxy strips it.
+  # This overlay requires PUBLIC_BASE_URL (.env.demo) — without a tunnel the fanout pair is moot.
+  voltcity:
+    environment:
+      BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL required for the demo overlay}/vct
+      OUTBOUND_TIMEOUT_SECONDS: ${MOCK_OUTBOUND_TIMEOUT_SECONDS:-45}
+  chargex:
+    environment:
+      BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL required for the demo overlay}/chx
       OUTBOUND_TIMEOUT_SECONDS: ${MOCK_OUTBOUND_TIMEOUT_SECONDS:-45}
