@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -412,11 +413,41 @@ func (h *Handlers) PartnerPull(c echo.Context) error {
 	if err != nil {
 		return fail(c, http.StatusBadRequest, err.Error(), nil)
 	}
-	result, err := h.mock.Post(c.Request().Context(), "/admin/pull/"+kind, map[string]int{"limit": limit})
-	if err != nil {
-		return failFrom(c, err)
+
+	// Every partner pulls, not just PLG — the point is one CPO feed serving several eMSPs at
+	// once. Concurrent because the tariffs feed costs ~19s a page; three sequential pulls would
+	// outlive the request timeout.
+	ctx := c.Request().Context()
+	type pullTarget struct {
+		key   string
+		admin *MockAdmin
 	}
-	return ok(c, json.RawMessage(result))
+	targets := []pullTarget{{key: "PLG", admin: h.mock}}
+	for _, p := range h.fanout {
+		targets = append(targets, pullTarget{key: strings.ToUpper(p.Key), admin: p.admin})
+	}
+	type pullResult struct {
+		Partner string          `json:"partner"`
+		OK      bool            `json:"ok"`
+		Error   string          `json:"error,omitempty"`
+		Result  json.RawMessage `json:"result,omitempty"`
+	}
+	results := make([]pullResult, len(targets))
+	var wg sync.WaitGroup
+	for i, tg := range targets {
+		wg.Add(1)
+		go func(i int, tg pullTarget) {
+			defer wg.Done()
+			raw, err := tg.admin.Post(ctx, "/admin/pull/"+kind, map[string]int{"limit": limit})
+			if err != nil {
+				results[i] = pullResult{Partner: tg.key, Error: describeErr(err)}
+				return
+			}
+			results[i] = pullResult{Partner: tg.key, OK: true, Result: json.RawMessage(raw)}
+		}(i, tg)
+	}
+	wg.Wait()
+	return ok(c, map[string]any{"results": results})
 }
 
 // EvoltBatchRun starts one Roaming Out cron job — the real batch-ocpi-process binary a k8s CronJob
