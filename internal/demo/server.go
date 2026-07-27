@@ -60,6 +60,7 @@ func NewServer(cfg Config, h *Handlers) (*echo.Echo, error) {
 	api.POST("/push/tariff", h.PushTariff)
 	api.DELETE("/push/tariff/:tariff_id", h.DeleteTariffPush)
 	api.POST("/pull/:kind", h.PartnerPull)
+	api.POST("/partner/new-batch", h.PartnerNewBatch)
 	api.GET("/evolt/mirror", h.EvoltMirror)
 	api.POST("/evolt/seed", h.InitEvolt)
 	api.GET("/tables", h.Tables)

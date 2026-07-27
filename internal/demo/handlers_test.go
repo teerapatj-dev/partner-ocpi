@@ -284,6 +284,42 @@ func TestPushEvseStatusResolvesLocation(t *testing.T) {
 	}
 }
 
+func TestPartnerNewBatch(t *testing.T) {
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"POST /admin/seed/new-batch": jsonResp(`{"locations":10,"tariffs":10,"last_updated":"2026-07-27T04:00:00Z"}`),
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+	rec := doReq(t, h.PartnerNewBatch, http.MethodPost, "/", "")
+	if got := decode(t, rec); rec.Code != http.StatusOK || !got.ok {
+		t.Fatalf("new batch failed: %d %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"locations":10`) {
+		t.Fatalf("counts not passed through: %s", rec.Body.String())
+	}
+}
+
+// The push pickers must keep listing the hand-picked objects only, or the batch buries them.
+func TestOwnForwardsSourceFilter(t *testing.T) {
+	var gotQuery string
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"GET /admin/own/locations": func(w http.ResponseWriter, r *http.Request) {
+			gotQuery = r.URL.RawQuery
+			w.Write([]byte(`[]`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+
+	doReq(t, h.Own, http.MethodGet, "/?source=base", "", "kind", "locations")
+	if gotQuery != "source=base" {
+		t.Fatalf("query forwarded to the mock = %q, want source=base", gotQuery)
+	}
+	// Anything the whitelist does not know is dropped rather than passed on.
+	doReq(t, h.Own, http.MethodGet, "/?source=%27%20OR%201%3D1--", "", "kind", "locations")
+	if gotQuery != "" {
+		t.Fatalf("unknown source reached the mock: %q", gotQuery)
+	}
+}
+
 func TestPartnerPullValidation(t *testing.T) {
 	h := newHandlers(t, Config{}, fakeMock(t, nil), nil)
 	rec := doReq(t, h.PartnerPull, http.MethodPost, "/", `{}`, "kind", "cdrs")

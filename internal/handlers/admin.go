@@ -243,7 +243,7 @@ func (h *Handlers) AdminState(c echo.Context) error {
 	for name, table := range map[string]string{
 		"own_locations": "own_locations", "own_tariffs": "own_tariffs",
 	} {
-		n, err := h.st.CountOwn(ctx, table)
+		n, err := h.st.CountOwn(ctx, table, "")
 		if err != nil {
 			return adminErr(c, http.StatusInternalServerError, "count failed")
 		}
@@ -289,11 +289,35 @@ func (h *Handlers) AdminOwn(c echo.Context) error {
 	if kind != "locations" && kind != "tariffs" {
 		return adminErr(c, http.StatusBadRequest, "kind must be locations or tariffs")
 	}
-	items, _, err := h.st.ListOwn(c.Request().Context(), "own_"+kind, store.ListFilter{Limit: 1000})
+	source := c.QueryParam("source")
+	if source != "" && source != seed.SourceBase && source != seed.SourceCron {
+		return adminErr(c, http.StatusBadRequest, "source must be base or cron")
+	}
+	items, _, err := h.st.ListOwn(c.Request().Context(), "own_"+kind, store.ListFilter{Limit: 1000, Source: source})
 	if err != nil {
 		return adminErr(c, http.StatusInternalServerError, "list failed")
 	}
 	return c.JSON(http.StatusOK, items)
+}
+
+// AdminNewBatch re-dates the cron batch to now. A pull cron only collects what changed since its
+// watermark, so without this a second run has nothing to find and the demo looks broken.
+func (h *Handlers) AdminNewBatch(c echo.Context) error {
+	ctx := c.Request().Context()
+	now := time.Now().UTC().Truncate(time.Second)
+	locations, err := h.st.RestampSource(ctx, "own_locations", seed.SourceCron, now)
+	if err != nil {
+		return adminErr(c, http.StatusInternalServerError, "restamp locations failed")
+	}
+	tariffs, err := h.st.RestampSource(ctx, "own_tariffs", seed.SourceCron, now)
+	if err != nil {
+		return adminErr(c, http.StatusInternalServerError, "restamp tariffs failed")
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"locations":    locations,
+		"tariffs":      tariffs,
+		"last_updated": now.Format("2006-01-02T15:04:05Z"),
+	})
 }
 
 func (h *Handlers) AdminReceived(c echo.Context) error {

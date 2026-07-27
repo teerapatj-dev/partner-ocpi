@@ -85,6 +85,7 @@ func New(cfg config.Config, st *store.Store, cl *client.Client) *echo.Echo {
 	admin.GET("/requests", h.AdminRequests)
 	admin.DELETE("/requests", h.AdminClearRequests)
 	admin.POST("/seed/reset", h.AdminSeedReset)
+	admin.POST("/seed/new-batch", h.AdminNewBatch)
 
 	return e
 }

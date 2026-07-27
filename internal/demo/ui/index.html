@@ -47,6 +47,37 @@ main{max-width:1500px;margin:0 auto;padding:16px 22px}
 .flow.in,.rpanel.in{border-top:3px solid var(--in)} .flow.out,.rpanel.out{border-top:3px solid var(--out)}
 .flow h3,.rpanel h3{margin:0 0 3px;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .flow .mini,.rpanel .mini{color:var(--muted);font-size:11.5px;margin:0 0 12px}
+.charger{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.chgtop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.chgstate{font:600 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.4px;padding:5px 9px;border-radius:6px;
+  background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+.chgstate.on{background:rgba(62,207,142,.14);color:var(--green);border-color:rgba(62,207,142,.45)}
+.chgstate.busy{background:rgba(255,180,84,.14);color:var(--amber);border-color:rgba(255,180,84,.45)}
+.chgmeter{font:12px ui-monospace,Menlo,monospace;color:var(--muted);text-align:right}
+.chgmeter b{color:var(--text);font-weight:600}
+.slider{position:relative;height:46px;border-radius:23px;background:var(--panel2);border:1px solid var(--line);
+  overflow:hidden;cursor:grab;user-select:none;touch-action:none}
+.slider:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.slider.dragging{cursor:grabbing}
+.slider.busy{cursor:progress;opacity:.75}
+.sfill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,rgba(62,207,142,.32),rgba(62,207,142,.12))}
+.charger.out .sfill{background:linear-gradient(90deg,rgba(183,138,255,.32),rgba(183,138,255,.12))}
+.charger.stop .sfill{background:linear-gradient(90deg,rgba(255,180,84,.32),rgba(255,180,84,.12))}
+.stext{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;color:var(--muted);pointer-events:none;padding:0 52px;text-align:center}
+.sknob{position:absolute;top:3px;left:3px;width:38px;height:38px;border-radius:19px;display:flex;
+  align-items:center;justify-content:center;font-size:16px;background:var(--in);color:#0b1220;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);transition:left .18s ease}
+.charger.out .sknob{background:var(--out)}
+.charger.stop .sknob{background:var(--amber)}
+.slider.dragging .sknob{transition:none}
+.chgsteps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.chgsteps li{font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:baseline}
+.chgsteps li .st{font:600 11px ui-monospace,Menlo,monospace;color:var(--text);min-width:78px}
+.chgsteps li.bad .st{color:var(--red)}
+details.adv{margin:4px 0 10px}
+details.adv summary{cursor:pointer;font-size:11.5px;color:var(--muted);padding:2px 0}
+details.adv summary:hover{color:var(--text)}
 .cardtag{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:ui-monospace,monospace}
 .rtag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:5px}
 .rtag.in{color:#08101f;background:var(--in)} .rtag.out{color:#08101f;background:var(--out)}
@@ -221,9 +252,22 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <div class="flowhead">⬆️ PUSH <span class="tagp">เรายิงไป partner</span></div>
         <div class="act"><span class="lbl">เลือกตู้ (evse)</span>
           <select id="sel-push-evse" title="EVSE ของสถานี demo"></select></div>
-        <div class="act"><span class="lbl">push สถานะ</span>
-          <select id="sel-kafka-status"><option>AVAILABLE</option><option>CHARGING</option><option>FINISHING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
-          <button class="in" id="btn-kafka" onclick="runFlow('in-loc-push-status',this)">ยิง event</button></div>
+        <div class="charger in" id="chg-in">
+          <div class="chgtop"><span class="chgstate" id="chg-in-state">AVAILABLE</span>
+            <span class="chgmeter" id="chg-in-meter">พร้อมใช้งาน</span></div>
+          <div class="slider" id="chg-in-slider" tabindex="0" role="button" aria-label="เลื่อนเพื่อเริ่มชาร์จ">
+            <div class="sfill" id="chg-in-fill"></div>
+            <span class="stext" id="chg-in-text">เลื่อนเพื่อเริ่มชาร์จ →</span>
+            <div class="sknob" id="chg-in-knob">⚡</div>
+          </div>
+          <ol class="chgsteps" id="chg-in-steps"></ol>
+        </div>
+        <p class="mini">ตู้ของเราเดินตามสถานะ <span class="mono">ocpp_status</span> ของ Evolt · <span class="mono">FINISHING</span> = สายยังเสียบ ฝั่ง partner จะเห็นเป็น <span class="mono">CHARGING</span> (mapOCPPStatus)</p>
+        <details class="adv"><summary>ส่งสถานะเดี่ยว (เคสขอบ เช่น OUTOFORDER)</summary>
+          <div class="act"><span class="lbl">push สถานะ</span>
+            <select id="sel-kafka-status"><option>AVAILABLE</option><option>CHARGING</option><option>FINISHING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
+            <button class="in" id="btn-kafka" onclick="runFlow('in-loc-push-status',this)">ยิง event</button></div>
+        </details>
       </div>
       <div class="rpanel in"><h3>🟩 ตู้ของ Evolt ที่ PlugSiam ถืออยู่ <span class="rtag in">received_*</span></h3>
         <p class="mini">คือหน้าจอที่ partner จริงเห็น (party ในข้อมูล = TH/EVT)</p><div id="res-loc-in"></div></div>
@@ -235,14 +279,30 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
         <div class="flowhead">⬆️ PUSH <span class="tagp">partner ยัดเข้ามา</span></div>
         <div class="act"><span class="lbl">push location</span>
           <select id="sel-location"></select><button class="out" onclick="runFlow('out-loc-push',this)">PUT</button></div>
-        <div class="act"><span class="lbl">push สถานะ</span>
-          <select id="sel-evse"></select>
-          <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
-          <button class="out" onclick="runFlow('out-loc-push-status',this)">PATCH</button></div>
+        <div class="act"><span class="lbl">เลือกตู้ (evse)</span><select id="sel-evse"></select></div>
+        <div class="charger out" id="chg-out">
+          <div class="chgtop"><span class="chgstate" id="chg-out-state">AVAILABLE</span>
+            <span class="chgmeter" id="chg-out-meter">พร้อมใช้งาน</span></div>
+          <div class="slider" id="chg-out-slider" tabindex="0" role="button" aria-label="เลื่อนเพื่อเริ่มชาร์จ">
+            <div class="sfill" id="chg-out-fill"></div>
+            <span class="stext" id="chg-out-text">เลื่อนเพื่อเริ่มชาร์จ →</span>
+            <div class="sknob" id="chg-out-knob">⚡</div>
+          </div>
+          <ol class="chgsteps" id="chg-out-steps"></ol>
+        </div>
+        <p class="mini">partner เป็น CPO ส่ง <span class="mono">OCPI Status</span> ตรงๆ — spec ไม่มี PREPARING/FINISHING เลยมีแค่ AVAILABLE ⇄ CHARGING</p>
+        <details class="adv"><summary>ส่งสถานะเดี่ยว (เคสขอบ เช่น OUTOFORDER)</summary>
+          <div class="act"><span class="lbl">push สถานะ</span>
+            <select id="sel-evse-status"><option>AVAILABLE</option><option>CHARGING</option><option>RESERVED</option><option>BLOCKED</option><option>INOPERATIVE</option><option>OUTOFORDER</option><option>PLANNED</option><option>REMOVED</option><option>UNKNOWN</option></select>
+            <button class="out" onclick="runFlow('out-loc-push-status',this)">PATCH</button></div>
+        </details>
         <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
+        <div class="act"><span class="lbl">partner ออกของใหม่</span>
+          <button class="ghost" onclick="runFlow('partner-new-batch',this)">🌱 อัปเดต 10 รายการ</button></div>
         <div class="act"><span class="lbl">cronjob จริง</span>
           <button class="out" id="btn-cron-loc" onclick="runFlow('out-loc-cron',this)">▶ locations_pull</button>
           <button class="ghost" id="btn-cron-loc-dry" onclick="runFlow('out-loc-cron-dry',this)">dry-run</button></div>
+        <p class="mini">ชุด <span class="mono">CRON-LOC-01…10</span> แยกจาก 4 ตัวที่ใช้ปุ่ม push · cron ดึงเฉพาะที่ใหม่กว่า watermark</p>
         <p class="mini" id="cron-loc-hint"></p>
       </div>
       <div class="rpanel out"><h3>🟪 ตู้ของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">ocpi_partner_*</span></h3>
@@ -283,9 +343,12 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
           <button class="out" onclick="runFlow('out-trf-push',this)">PUT (upsert)</button>
           <button class="danger" onclick="runFlow('out-trf-del',this)">DELETE (soft)</button></div>
         <div class="flowhead">⬇️ PULL <span class="tagp">เราดึงจาก partner</span></div>
+        <div class="act"><span class="lbl">partner ออกของใหม่</span>
+          <button class="ghost" onclick="runFlow('partner-new-batch',this)">🌱 อัปเดต 10 รายการ</button></div>
         <div class="act"><span class="lbl">cronjob จริง</span>
           <button class="out" id="btn-cron-trf" onclick="runFlow('out-trf-cron',this)">▶ tariffs_pull</button>
           <button class="ghost" id="btn-cron-trf-dry" onclick="runFlow('out-trf-cron-dry',this)">dry-run</button></div>
+        <p class="mini">ชุด <span class="mono">CRON-TAR-01…10</span> แยกจาก 3 ตัวที่ใช้ปุ่ม push · cron ดึงเฉพาะที่ใหม่กว่า watermark</p>
         <p class="mini" id="cron-trf-hint"></p>
       </div>
       <div class="rpanel out"><h3>🟪 ราคาของ PlugSiam ที่ Evolt เก็บ <span class="rtag out">อ่านกลับ</span></h3>
@@ -422,6 +485,8 @@ const FLOWS={
     steps:['partner ยิง PUT /ocpi/emsp/2.2.1/tariffs/{cc}/{pid}/{id} (token-in)','bff → orch → core-auth verify','orch → roaming: upsert (เจอ key เดิมเขียนทับ)','ตอบ 1000']},
   'out-trf-del':{title:'Roaming Out · Tariff — partner ลบ tariff',card:'EV-1585',dir:'out',method:'DELETE',urlFrom:()=>'/api/demo/push/tariff/'+encodeURIComponent(val('sel-tariff')),
     steps:['partner ยิง DELETE .../tariffs/{cc}/{pid}/{id} (token-in)','orch → roaming: soft-delete (ปั๊ก deleted_at)','ตอบ 1000']},
+  'partner-new-batch':{title:'partner ออกข้อมูลใหม่ 10 รายการ (ชุด cron)',card:'mock',dir:'out',method:'POST',url:'/api/demo/partner/new-batch',
+    steps:['mock ปั๊ก last_updated ของชุด cron เป็นเวลาปัจจุบัน (location 10 + tariff 10)','ของชุดนี้เลยใหม่กว่า watermark ที่ Evolt ถืออยู่','cron รอบถัดไปจะดึงมาครบ 10 รายการ']},
   'out-loc-cron':{title:'Roaming Out · Location — รัน cronjob จริง (locations_pull)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:false},
     steps:['batch ถาม core-auth: partner ที่เป็น sender + มี locations','ถอดรหัส token partner (AES key เดียวกับ orch)','อ่าน watermark จาก roaming แล้ว page ผ่าน adapter','upsert ทุก location → ocpi_partner_*']},
   'out-loc-cron-dry':{title:'Roaming Out · Location — cronjob dry-run (ไม่เขียน)',card:'EV-1561',dir:'out',method:'POST',url:'/api/demo/evolt/batch/locations_pull',body:{dry_run:true},
@@ -472,6 +537,126 @@ function closeModal(){$('modal').classList.remove('show');clearTimers()}
 function showJSON(title,obj){$('j-title').textContent=title;$('j-body').textContent=JSON.stringify(obj,null,2);$('jmodal').classList.add('show')}
 function closeJSON(){$('jmodal').classList.remove('show')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeJSON()}});
+
+/* ── slide-to-charge ─────────────────────────────────────────────────────────
+   A session is a scripted status ladder, one real request per rung, so the Log
+   tab shows exactly what a charge does on the wire. The vocabularies differ:
+   Evolt drives ocpp_status (has FINISHING), OCPI has no such rung.            */
+const CHARGERS={
+  in:{
+    kW:22, endpoint:'/api/demo/evolt/evse-status-event',
+    body:s=>({status:s,evse_id:val('sel-push-evse')}),
+    start:[{s:'CHARGING',t:'เสียบสาย → ตู้เริ่มจ่ายไฟ'}],
+    stop:[{s:'FINISHING',t:'กดหยุด → สายยังเสียบ (partner เห็น CHARGING)'},
+          {s:'AVAILABLE',t:'ถอดสาย → หัวชาร์จว่าง'}]},
+  out:{
+    kW:60, endpoint:'/api/demo/push/evse-status',
+    body:s=>({evse_uid:val('sel-evse'),status:s}),
+    start:[{s:'CHARGING',t:'partner PATCH → CHARGING'}],
+    stop:[{s:'AVAILABLE',t:'partner PATCH → AVAILABLE (OCPI ไม่มี FINISHING)'}]},
+};
+const chgState={in:{charging:false,busy:false,timer:null,t0:0},out:{charging:false,busy:false,timer:null,t0:0}};
+
+function chgSetKnob(side,pct){
+  const s=chgState[side];if(s.busy)return;
+  $('chg-'+side+'-knob').style.left=`calc(3px + ${pct} * (100% - 44px))`;
+  $('chg-'+side+'-fill').style.width=(pct*100)+'%';
+}
+function chgResetSlider(side){
+  const stopping=chgState[side].charging;
+  $('chg-'+side).classList.toggle('stop',stopping);
+  $('chg-'+side+'-text').textContent=stopping?'← เลื่อนเพื่อหยุดชาร์จ':'เลื่อนเพื่อเริ่มชาร์จ →';
+  chgSetKnob(side,stopping?1:0);
+}
+function chgLog(side,text,ok){
+  const li=document.createElement('li');
+  if(!ok)li.className='bad';
+  li.innerHTML='<span class="st">'+esc(text.status)+'</span><span>'+esc(text.note)+'</span>';
+  $('chg-'+side+'-steps').appendChild(li);
+}
+function chgMeterTick(side){
+  const s=chgState[side];if(!s.charging)return;
+  const secs=Math.floor((Date.now()-s.t0)/1000);
+  const kWh=(CHARGERS[side].kW*secs/3600);
+  $('chg-'+side+'-meter').innerHTML='<b>'+kWh.toFixed(2)+'</b> kWh · '+CHARGERS[side].kW+' kW · '+
+    String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0')+' <span title="ตัวเลขจำลองในหน้าจอ ไม่ได้มาจากมิเตอร์จริง">(จำลอง)</span>';
+}
+function chgSetState(side,status){
+  const el=$('chg-'+side+'-state');
+  el.textContent=status;
+  el.className='chgstate'+(status==='CHARGING'?' busy':status==='AVAILABLE'?' on':'');
+}
+
+async function chgRunSession(side,phase){
+  const s=chgState[side],cfg=CHARGERS[side];
+  if(s.busy)return;
+  s.busy=true;$('chg-'+side+'-slider').classList.add('busy');
+  if(phase==='start')$('chg-'+side+'-steps').innerHTML='';
+  let failed=false;
+  for(const step of cfg[phase]){
+    chgSetState(side,step.s);
+    let ok=false,note=step.t;
+    try{
+      const r=await api(cfg.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(cfg.body(step.s))});
+      const j=await r.json();
+      ok=!!j.ok;
+      if(!ok)note=step.t+' — '+(j.error||('HTTP '+r.status));
+    }catch(e){note=step.t+' — '+String(e)}
+    chgLog(side,{status:step.s,note},ok);
+    if(!ok){failed=true;break}
+    await new Promise(r=>setTimeout(r,600));
+  }
+  if(!failed){
+    if(phase==='start'){
+      s.charging=true;s.t0=Date.now();chgMeterTick(side);
+      s.timer=setInterval(()=>chgMeterTick(side),1000);
+    }else{
+      s.charging=false;clearInterval(s.timer);s.timer=null;
+      $('chg-'+side+'-meter').textContent='พร้อมใช้งาน';
+    }
+  }
+  s.busy=false;$('chg-'+side+'-slider').classList.remove('busy');
+  chgResetSlider(side);
+  refreshState();refreshLog();refreshPartnerData();refreshMirror();
+  if(tblCur)loadTablePage();
+}
+
+function chgBindSlider(side){
+  const track=$('chg-'+side+'-slider'),knob=$('chg-'+side+'-knob');
+  let dragging=false,startX=0,startPct=0;
+  const pctOf=e=>{
+    const r=track.getBoundingClientRect();
+    return Math.min(1,Math.max(0,startPct+(e.clientX-startX)/(r.width-44)));
+  };
+  const done=pct=>{
+    const s=chgState[side];
+    // Charging slides right to left, so each direction only fires at the end it travels to.
+    const tripped=s.charging?pct<=.15:pct>=.85;
+    if(tripped)chgRunSession(side,s.charging?'stop':'start');
+    else chgResetSlider(side);
+  };
+  knob.addEventListener('pointerdown',e=>{
+    if(chgState[side].busy)return;
+    dragging=true;startX=e.clientX;startPct=chgState[side].charging?1:0;
+    knob.setPointerCapture(e.pointerId);track.classList.add('dragging');
+  });
+  knob.addEventListener('pointermove',e=>{if(dragging)chgSetKnob(side,pctOf(e))});
+  const end=e=>{
+    if(!dragging)return;
+    dragging=false;track.classList.remove('dragging');
+    done(pctOf(e));
+  };
+  knob.addEventListener('pointerup',end);
+  knob.addEventListener('pointercancel',end);
+  // Keyboard equivalent — a slider nobody can reach without a mouse is a broken control.
+  track.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    e.preventDefault();
+    if(!chgState[side].busy)chgRunSession(side,chgState[side].charging?'stop':'start');
+  });
+  chgResetSlider(side);
+}
 
 async function runFlow(key,btn){
   const f=FLOWS[key];if(!f)return;
@@ -537,8 +722,8 @@ async function refreshStationEvses(){
 async function refreshOwn(){
   try{
     const [locs,trfs]=await Promise.all([
-      api('/api/demo/own/locations').then(r=>r.json()),
-      api('/api/demo/own/tariffs').then(r=>r.json())]);
+      api('/api/demo/own/locations?source=base').then(r=>r.json()),
+      api('/api/demo/own/tariffs?source=base').then(r=>r.json())]);
     if(locs.ok){
       const sl=$('sel-location'),se=$('sel-evse');const kl=sl.value,ke=se.value;sl.innerHTML='';se.innerHTML='';
       (locs.data||[]).forEach(l=>{sl.add(new Option(`${l.id} — ${l.name||''}`,l.id));
@@ -750,6 +935,7 @@ async function loadTablePage(){
 }
 
 // ---- boot ----
+chgBindSlider('in');chgBindSlider('out');
 refreshState();refreshOwn();refreshLog();refreshPartnerData();refreshMirror();refreshStationEvses();
 setInterval(refreshStationEvses,8000);
 setInterval(refreshState,3000);

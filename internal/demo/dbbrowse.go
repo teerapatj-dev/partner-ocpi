@@ -75,8 +75,10 @@ var browsableTables = map[string]tableSpec{
 		from: `(SELECT r.party_name, e->>'identifier' AS identifier, e->>'role' AS role, e->>'url' AS url, r.updated_at
 			FROM registrations r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.endpoints, '[]'::jsonb)) AS e) AS pe`,
 		orderBy: "identifier, role"},
-	"own_locations": {side: "partner", columns: []string{"id", "last_updated"}, orderBy: "id"},
-	"own_tariffs":   {side: "partner", columns: []string{"id", "last_updated"}, orderBy: "id"},
+	"own_locations": {side: "partner", columns: []string{"id", "source", "name", "city", "last_updated"},
+		expr: map[string]string{"name": "payload->>'name'", "city": "payload->>'city'"}, orderBy: "source, id"},
+	"own_tariffs": {side: "partner", columns: []string{"id", "source", "currency", "type", "last_updated"},
+		expr: map[string]string{"currency": "payload->>'currency'", "type": "payload->>'type'"}, orderBy: "source, id"},
 	"received_locations": {side: "partner", columns: []string{"country_code", "party_id", "location_id", "name", "address", "city", "last_updated", "synced_at"},
 		expr: map[string]string{"name": "payload->>'name'", "address": "payload->>'address'", "city": "payload->>'city'"}, orderBy: "synced_at DESC"},
 	"received_evses": {side: "partner", columns: []string{"country_code", "party_id", "location_id", "evse_uid", "evse_id", "status", "last_updated", "synced_at"},

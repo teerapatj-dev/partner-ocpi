@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -42,6 +43,23 @@ func TestAdminPushLocationValidation(t *testing.T) {
 				t.Fatalf("status = %d, want 400", rec.Code)
 			}
 		})
+	}
+}
+
+// source names a seed batch, so anything outside the two known names is rejected before it can
+// reach a query.
+func TestAdminOwnRejectsUnknownSource(t *testing.T) {
+	h := &Handlers{}
+	for _, source := range []string{"bogus", "BASE", "' OR 1=1--"} {
+		c, rec := adminCtx(t, http.MethodGet, "/admin/own/locations?source="+url.QueryEscape(source), "")
+		c.SetParamNames("kind")
+		c.SetParamValues("locations")
+		if err := h.AdminOwn(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("source %q: status = %d, want 400", source, rec.Code)
+		}
 	}
 }
 

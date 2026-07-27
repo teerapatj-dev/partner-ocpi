@@ -91,6 +91,11 @@ var schema = []string{
 	`ALTER TABLE received_evses      ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
 	`ALTER TABLE received_connectors ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
 	`ALTER TABLE received_tariffs    ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+	// source splits the hand-picked objects the push demo drives ('base') from the batch the pull
+	// cron is meant to collect ('cron'). Both are one OCPI list to a caller — only the demo tells
+	// them apart.
+	`ALTER TABLE own_locations ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'base'`,
+	`ALTER TABLE own_tariffs   ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'base'`,
 }
 
 // Open connects with retries so the app survives compose/Neon cold starts.

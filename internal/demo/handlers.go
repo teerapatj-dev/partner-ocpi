@@ -611,12 +611,27 @@ func (h *Handlers) ClearRequests(c echo.Context) error {
 	return ok(c, json.RawMessage(result))
 }
 
+// PartnerNewBatch has the partner republish its cron batch with a fresh timestamp, giving the next
+// pull-cron run something to collect.
+func (h *Handlers) PartnerNewBatch(c echo.Context) error {
+	result, err := h.mock.Post(c.Request().Context(), "/admin/seed/new-batch", nil)
+	if err != nil {
+		return failFrom(c, err)
+	}
+	return ok(c, json.RawMessage(result))
+}
+
 func (h *Handlers) Own(c echo.Context) error {
 	kind := c.Param("kind")
 	if kind != "locations" && kind != "tariffs" {
 		return fail(c, http.StatusBadRequest, "kind must be locations or tariffs", nil)
 	}
-	result, err := h.mock.Get(c.Request().Context(), "/admin/own/"+kind)
+	// The push demo drives the hand-picked objects only; the cron batch would just crowd its pickers.
+	path := "/admin/own/" + kind
+	if source := c.QueryParam("source"); source == "base" || source == "cron" {
+		path += "?source=" + source
+	}
+	result, err := h.mock.Get(c.Request().Context(), path)
 	if err != nil {
 		return failFrom(c, err)
 	}
