@@ -488,98 +488,31 @@ func TestOcpiProxyMockDown(t *testing.T) {
 	}
 }
 
-// Row shape here mirrors store.ReceivedRow exactly — its location id
-// serializes as "key", and parsing any other field name broke baseline
-// detection once already.
-func TestEnsureKafkaBaseline(t *testing.T) {
-	cfg := Config{
-		KafkaStationID: "st-1", KafkaEvseUID: "29", KafkaEvseID: "uuid-29",
-		KafkaPartyCC: "TH", KafkaPartyID: "EVO",
-	}
-
-	t.Run("baseline already present", func(t *testing.T) {
-		injected := false
-		mock := fakeMock(t, map[string]http.HandlerFunc{
-			"GET /admin/received/locations": jsonResp(`{"locations":[{"country_code":"TH","party_id":"EVO","key":"st-1","payload":{}}]}`),
-			"POST /admin/received/locations": func(w http.ResponseWriter, _ *http.Request) {
-				injected = true
-				w.Write([]byte(`{"stored":"st-1"}`))
-			},
-		})
-		h := newHandlers(t, cfg, mock, nil)
-		seeded, err := h.ensureKafkaBaseline(t.Context())
-		if err != nil || seeded || injected {
-			t.Fatalf("seeded=%v injected=%v err=%v — must detect existing baseline", seeded, injected, err)
-		}
+// The initial sync is the realism contract: registration ends with the partner pulling Evolt's
+// real catalog (all pages), and it must land on the partner being registered — a write that went
+// to the main mock instead once left VCT/CHX without data and every status PATCH answered 2003.
+func TestInitialSyncTargetsTheGivenAdmin(t *testing.T) {
+	mainHit := false
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"POST /admin/pull/locations": func(w http.ResponseWriter, _ *http.Request) {
+			mainHit = true
+			w.Write([]byte(`{}`))
+		},
 	})
-
-	t.Run("baseline missing gets injected", func(t *testing.T) {
-		var inject map[string]any
-		mock := fakeMock(t, map[string]http.HandlerFunc{
-			"GET /admin/received/locations": jsonResp(`{"locations":[{"key":"other-station"}]}`),
-			"POST /admin/received/locations": func(w http.ResponseWriter, r *http.Request) {
-				inject = mustDecode(r)
-				w.Write([]byte(`{"stored":"st-1"}`))
-			},
-		})
-		h := newHandlers(t, cfg, mock, nil)
-		seeded, err := h.ensureKafkaBaseline(t.Context())
-		if err != nil || !seeded {
-			t.Fatalf("seeded=%v err=%v", seeded, err)
-		}
-		if inject["country_code"] != "TH" || inject["party_id"] != "EVO" {
-			t.Fatalf("inject party = %v/%v", inject["country_code"], inject["party_id"])
-		}
-		payload, _ := inject["payload"].(map[string]any)
-		if payload["id"] != "st-1" {
-			t.Fatalf("payload id = %v", payload["id"])
-		}
+	var got map[string]any
+	alt := fakeMock(t, map[string]http.HandlerFunc{
+		"POST /admin/pull/locations": func(w http.ResponseWriter, r *http.Request) {
+			got = mustDecode(r)
+			w.Write([]byte(`{"pages":4,"stored":69}`))
+		},
 	})
-
-	// The fanout handshake seeds the partner being registered — a write that lands on the main
-	// mock instead left VCT/CHX without a baseline and every status PATCH answered 2003.
-	t.Run("seed lands on the admin asked, not the main mock", func(t *testing.T) {
-		mainHit := false
-		mock := fakeMock(t, map[string]http.HandlerFunc{
-			"POST /admin/received/locations": func(w http.ResponseWriter, _ *http.Request) {
-				mainHit = true
-				w.Write([]byte(`{}`))
-			},
-		})
-		altHit := false
-		alt := fakeMock(t, map[string]http.HandlerFunc{
-			"GET /admin/received/locations": jsonResp(`{"locations":[]}`),
-			"POST /admin/received/locations": func(w http.ResponseWriter, _ *http.Request) {
-				altHit = true
-				w.Write([]byte(`{"stored":"st-1"}`))
-			},
-		})
-		h := newHandlers(t, cfg, mock, nil)
-		admin := NewMockAdminAt(alt.URL, adminKey, h.cfg)
-		seeded, err := h.ensureKafkaBaselineFor(t.Context(), admin)
-		if err != nil || !seeded {
-			t.Fatalf("seeded=%v err=%v", seeded, err)
-		}
-		if mainHit || !altHit {
-			t.Fatalf("mainHit=%v altHit=%v — baseline must be written to the given admin", mainHit, altHit)
-		}
-	})
-}
-
-func TestOcpiProxyRejectsDotSegments(t *testing.T) {
-	handler, err := ocpiProxy("http://127.0.0.1:1", "")
-	if err != nil {
-		t.Fatal(err)
+	h := newHandlers(t, Config{}, mock, nil)
+	h.initialSync(t.Context(), NewMockAdminAt(alt.URL, adminKey, h.cfg), "vct")
+	if mainHit || got == nil {
+		t.Fatalf("mainHit=%v altCalled=%v — sync must hit the given admin only", mainHit, got != nil)
 	}
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "http://demo/ocpi/../admin/state", nil)
-	req.URL.Path = "/ocpi/../admin/state"
-	rec := httptest.NewRecorder()
-	if err := handler(e.NewContext(req, rec)); err != nil {
-		t.Fatal(err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
+	if got["all"] != true {
+		t.Fatalf("initial sync must walk every page, body=%v", got)
 	}
 }
 

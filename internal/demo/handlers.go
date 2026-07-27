@@ -134,20 +134,18 @@ func (h *Handlers) PartnerInitHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	h.seedBaselineAfterHandshake(ctx)
+	h.initialSync(ctx, h.mock, "PLG")
 	return ok(c, json.RawMessage(result))
 }
 
-// seedBaselineAfterHandshake PUTs the demo station's baseline location into the partner as soon as a
-// registration completes — the moment the real CPO would publish its estate. From here on a status
-// event is what it claims to be: an update to something the partner already holds. Best-effort: the
-// handshake has succeeded, and the status push reports a missing baseline clearly on its own.
-func (h *Handlers) seedBaselineAfterHandshake(ctx context.Context) {
-	if enabled, _ := h.kafka.Enabled(); !enabled {
-		return
-	}
-	if _, err := h.ensureKafkaBaseline(ctx); err != nil {
-		log.Warn().Err(err).Msg("baseline seed after handshake failed")
+// initialSync makes the freshly registered partner pull Evolt's whole locations catalog — what a
+// real eMSP does the moment registration completes. Every page is a genuine OCPI GET (visible in
+// the log), so a later status event is what it claims to be: a PATCH to real data the partner
+// already holds. Best-effort: the handshake has succeeded, and the status push reports a missing
+// location clearly on its own.
+func (h *Handlers) initialSync(ctx context.Context, admin *MockAdmin, label string) {
+	if _, err := admin.Post(ctx, "/admin/pull/locations", map[string]any{"limit": 20, "all": true}); err != nil {
+		log.Warn().Err(err).Str("partner", label).Msg("initial locations sync after handshake failed")
 	}
 }
 
@@ -176,7 +174,7 @@ func (h *Handlers) EvoltInitHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	h.seedBaselineAfterHandshake(ctx)
+	h.initialSync(ctx, h.mock, "PLG")
 	return ok(c, json.RawMessage(result))
 }
 
@@ -556,7 +554,7 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 		}
 		if _, inPartner := held[target.OCPIUID]; !inPartner {
 			return fail(c, http.StatusConflict,
-				"partner ยังไม่มีตู้ "+target.OCPIUID+" — กด Handshake ใหม่ (baseline location จะถูกส่งให้ตอนจบ)", nil)
+				"partner ยังไม่มีตู้ "+target.OCPIUID+" — กด Handshake ใหม่ (partner จะ initial sync ดึง locations จริงตอนจบ)", nil)
 		}
 		if _, err := h.db.SimulateEvseOnline(ctx, target.ID, req.Status); err != nil {
 			return fail(c, http.StatusBadGateway, "charger simulate failed: "+err.Error(), nil)
@@ -575,7 +573,7 @@ func (h *Handlers) EvoltEvseStatusEvent(c echo.Context) error {
 	// picked status instead of UNKNOWN; without the simulator the event still fires with the DB's value.
 	if _, inPartner := held[h.cfg.KafkaOCPIEvseUID]; !inPartner {
 		return fail(c, http.StatusConflict,
-			"partner ยังไม่มีตู้ "+h.cfg.KafkaOCPIEvseUID+" — กด Handshake ใหม่ (baseline location จะถูกส่งให้ตอนจบ)", nil)
+			"partner ยังไม่มีตู้ "+h.cfg.KafkaOCPIEvseUID+" — กด Handshake ใหม่ (partner จะ initial sync ดึง locations จริงตอนจบ)", nil)
 	}
 	simulated := false
 	if h.charger != nil {
@@ -662,8 +660,10 @@ func (h *Handlers) PartnerCache(c echo.Context) error {
 }
 
 // partnerEvseStatuses maps the partner's received EVSE uid to the status it currently holds.
+// lean=1: after a full initial sync the payloads of the whole estate blow past the admin client's
+// 1 MiB cap, and only key+status matter here.
 func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, error) {
-	raw, err := h.mock.Get(ctx, "/admin/received/locations")
+	raw, err := h.mock.Get(ctx, "/admin/received/locations?lean=1")
 	if err != nil {
 		return nil, err
 	}
@@ -684,62 +684,6 @@ func (h *Handlers) partnerEvseStatuses(ctx context.Context) (map[string]string, 
 		}
 	}
 	return out, nil
-}
-
-// ensureKafkaBaseline injects a minimal received location for the configured
-// station if the replica has none — Evolt only PATCHes EVSE status, never PUTs
-// the full location, so without a baseline every PATCH answers 2003.
-func (h *Handlers) ensureKafkaBaseline(ctx context.Context) (bool, error) {
-	return h.ensureKafkaBaselineFor(ctx, h.mock)
-}
-
-func (h *Handlers) ensureKafkaBaselineFor(ctx context.Context, admin *MockAdmin) (bool, error) {
-	raw, err := admin.Get(ctx, "/admin/received/locations")
-	if err != nil {
-		return false, err
-	}
-	// ReceivedRow serializes the location id as "key" (store/received.go).
-	var received struct {
-		Locations []struct {
-			Key string `json:"key"`
-		} `json:"locations"`
-	}
-	if err := json.Unmarshal(raw, &received); err == nil {
-		for _, loc := range received.Locations {
-			if loc.Key == h.cfg.KafkaStationID {
-				return false, nil
-			}
-		}
-	}
-	// Seed every demo-station EVSE into the baseline so a PATCH to any chosen head lands (no 2003).
-	// Falls back to the single configured EVSE when the DB is unavailable.
-	var evses []map[string]any
-	if h.db != nil {
-		if list, err := h.db.DemoStationEvses(ctx); err == nil {
-			for _, e := range list {
-				evses = append(evses, map[string]any{"uid": e.OCPIUID, "status": "UNKNOWN", "last_updated": "2020-01-01T00:00:00Z"})
-			}
-		}
-	}
-	if len(evses) == 0 {
-		evses = []map[string]any{{"uid": h.cfg.KafkaOCPIEvseUID, "status": "UNKNOWN", "last_updated": "2020-01-01T00:00:00Z"}}
-	}
-	baseline := map[string]any{
-		"id":           h.cfg.KafkaStationID,
-		"country_code": h.cfg.KafkaPartyCC,
-		"party_id":     h.cfg.KafkaPartyID,
-		"name":         "demo baseline",
-		"evses":        evses,
-		"last_updated": "2020-01-01T00:00:00Z",
-	}
-	if _, err := admin.Post(ctx, "/admin/received/locations", map[string]any{
-		"country_code": h.cfg.KafkaPartyCC,
-		"party_id":     h.cfg.KafkaPartyID,
-		"payload":      baseline,
-	}); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // Unregister clears the partner's registration so a repeat demo starts from a
@@ -827,7 +771,9 @@ func (h *Handlers) Received(c echo.Context) error {
 		return fail(c, http.StatusBadRequest, "kind must be locations or tariffs", nil)
 	}
 	ctx := c.Request().Context()
-	result, err := h.mock.Get(ctx, "/admin/received/"+kind)
+	// limit: the panel shows the newest slice; a fully synced catalog with payloads would blow
+	// past the admin client's 1 MiB cap.
+	result, err := h.mock.Get(ctx, "/admin/received/"+kind+"?limit=30")
 	if err != nil {
 		return failFrom(c, err)
 	}

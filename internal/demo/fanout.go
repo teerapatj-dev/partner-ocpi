@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/rs/zerolog/log"
 )
 
 // The fanout partners (VoltCity/ChargeX) exist to be pushed at: once registered they stay in the
@@ -96,13 +95,9 @@ func (h *Handlers) FanoutHandshake(c echo.Context) error {
 	if err != nil {
 		return failFrom(c, err)
 	}
-	// Same contract as the main partner: the baseline location lands at registration time, so the
+	// Same contract as the main partner: registration ends with the real initial sync, so the
 	// EVSE-status fanout answers 1000 here instead of 2003.
-	if enabled, _ := h.kafka.Enabled(); enabled {
-		if _, err := h.ensureKafkaBaselineFor(ctx, p.admin); err != nil {
-			log.Warn().Err(err).Str("partner", p.Key).Msg("fanout baseline seed failed")
-		}
-	}
+	h.initialSync(ctx, p.admin, p.Key)
 	return ok(c, json.RawMessage(result))
 }
 

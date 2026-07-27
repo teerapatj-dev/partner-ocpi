@@ -144,6 +144,8 @@ func (h *Handlers) AdminPushLocation(c echo.Context) error {
 
 type pullRequest struct {
 	Limit int `json:"limit"`
+	// All walks every page (initial-sync style) instead of the first page only.
+	All bool `json:"all"`
 }
 
 func (h *Handlers) AdminPullCounterparty(c echo.Context) error {
@@ -161,6 +163,13 @@ func (h *Handlers) AdminPullCounterparty(c echo.Context) error {
 	}
 	if limit > 100 {
 		limit = 100
+	}
+	if req.All {
+		result, err := h.cl.PullAllFromCounterparty(c.Request().Context(), kind, limit, 25)
+		if err != nil {
+			return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": result})
+		}
+		return c.JSON(http.StatusOK, result)
 	}
 	result, err := h.cl.PullFromCounterparty(c.Request().Context(), kind, limit)
 	if err != nil {
@@ -322,6 +331,25 @@ func (h *Handlers) AdminNewBatch(c echo.Context) error {
 
 func (h *Handlers) AdminReceived(c echo.Context) error {
 	ctx := c.Request().Context()
+	// A synced catalog holds the counterparty's whole estate; full payloads for every row can
+	// exceed what callers will read. lean=1 strips payloads, limit=N keeps the newest N per list
+	// (rows come back last_updated DESC) — 0 or absent returns everything, as before.
+	lean := c.QueryParam("lean") == "1"
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	trim := func(rows []store.ReceivedRow) []store.ReceivedRow {
+		if limit > 0 && len(rows) > limit {
+			rows = rows[:limit]
+		}
+		if lean {
+			out := make([]store.ReceivedRow, len(rows))
+			for i, r := range rows {
+				r.Payload = nil
+				out[i] = r
+			}
+			return out
+		}
+		return rows
+	}
 	switch c.Param("kind") {
 	case "locations":
 		locations, err := h.st.ListReceived(ctx, "locations")
@@ -337,14 +365,14 @@ func (h *Handlers) AdminReceived(c echo.Context) error {
 			return adminErr(c, http.StatusInternalServerError, "list failed")
 		}
 		return c.JSON(http.StatusOK, map[string]any{
-			"locations": locations, "evses": evses, "connectors": connectors,
+			"locations": trim(locations), "evses": trim(evses), "connectors": trim(connectors),
 		})
 	case "tariffs":
 		tariffs, err := h.st.ListReceived(ctx, "tariffs")
 		if err != nil {
 			return adminErr(c, http.StatusInternalServerError, "list failed")
 		}
-		return c.JSON(http.StatusOK, map[string]any{"tariffs": tariffs})
+		return c.JSON(http.StatusOK, map[string]any{"tariffs": trim(tariffs)})
 	default:
 		return adminErr(c, http.StatusBadRequest, "kind must be locations or tariffs")
 	}

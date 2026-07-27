@@ -479,6 +479,59 @@ func (c *Client) PullFromCounterparty(ctx context.Context, identifier string, li
 	return out, nil
 }
 
+// PullAllResult summarises a whole-catalog sync: every page walked, everything cached.
+type PullAllResult struct {
+	URL            string `json:"url"`
+	Pages          int    `json:"pages"`
+	HTTPStatus     int    `json:"http_status"`      // last page's
+	OCPIStatusCode int    `json:"ocpi_status_code"` // last page's
+	Total          *int   `json:"total,omitempty"`
+	Stored         int    `json:"stored"`
+}
+
+// PullAllFromCounterparty walks the counterparty's whole SENDER list the way a real eMSP runs its
+// initial sync after registration: page after page until the feed is exhausted (or maxPages, a
+// runaway guard). Every object lands in received_* exactly as a single-page pull would store it.
+func (c *Client) PullAllFromCounterparty(ctx context.Context, identifier string, pageLimit, maxPages int) (PullAllResult, error) {
+	reg, err := c.st.FirstRegistered(ctx)
+	if err != nil {
+		return PullAllResult{}, fmt.Errorf("no REGISTERED counterparty: %w", err)
+	}
+	base, err := c.endpointURL(reg, identifier, "SENDER")
+	if err != nil {
+		return PullAllResult{}, err
+	}
+	out := PullAllResult{URL: strings.TrimRight(base, "/")}
+	for offset := 0; out.Pages < maxPages; offset += pageLimit {
+		url := fmt.Sprintf("%s?offset=%d&limit=%d", out.URL, offset, pageLimit)
+		res, err := c.do(ctx, http.MethodGet, url, reg.TokenOutbound, nil, reg.CountryCode, reg.PartyID)
+		if err != nil {
+			return out, err
+		}
+		out.Pages++
+		out.HTTPStatus = res.HTTPStatus
+		out.OCPIStatusCode, _ = parseAnyStatus(res.Body)
+		if v := res.Header.Get("X-Total-Count"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				out.Total = &n
+			}
+		}
+		var items json.RawMessage
+		if err := parseEnvelope(res, &items); err != nil {
+			return out, fmt.Errorf("parse %s page at offset %d: %w", identifier, offset, err)
+		}
+		out.Stored += c.cachePulled(ctx, identifier, items, reg.CountryCode, reg.PartyID)
+		var arr []json.RawMessage
+		if err := json.Unmarshal(items, &arr); err != nil || len(arr) < pageLimit {
+			break // short (or empty) page = the feed is done
+		}
+		if out.Total != nil && offset+pageLimit >= *out.Total {
+			break
+		}
+	}
+	return out, nil
+}
+
 // cachePulled writes each pulled CPO object into received_* (locations explode into evses/connectors).
 // country_code/party_id come off each object, falling back to the counterparty's when absent.
 func (c *Client) cachePulled(ctx context.Context, kind string, items json.RawMessage, fbCC, fbPID string) int {
