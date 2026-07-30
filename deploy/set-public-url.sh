@@ -44,8 +44,16 @@ curl -sf --max-time 90 -X POST "$DEMO/api/demo/unregister" >/dev/null
 
 for p in plg vct chx; do
   printf '  handshake %s … ' "$p"
-  curl -sf --max-time 120 -X POST "$DEMO/api/demo/fanout/$p/handshake" |
-    python3 -c 'import json,sys; d=json.load(sys.stdin); print("OK" if d.get("ok") else "FAILED: "+str(d.get("error")))'
+  # No -f: a rejected handshake answers 502 with the reason in the body, which is the whole point of
+  # printing it. -f would throw the body away and leave the reader with an empty line.
+  curl -s --max-time 120 -X POST "$DEMO/api/demo/fanout/$p/handshake" |
+    python3 -c 'import json,sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except ValueError:
+    print("FAILED: " + (raw.strip()[:200] or "no response")); sys.exit()
+print("OK" if d.get("ok") else "FAILED: %s %s" % (d.get("error"), d.get("detail") or ""))'
 done
 
 echo
