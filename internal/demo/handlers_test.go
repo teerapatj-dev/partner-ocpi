@@ -2,6 +2,7 @@ package demo
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -518,6 +519,36 @@ func TestCredentialsActionsTargetThePickedPartner(t *testing.T) {
 	rec = doReq(t, h.CredentialsPut, http.MethodPost, "/", `{"partner":"zzz"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown partner must 400, got %d", rec.Code)
+	}
+}
+
+// PUT /credentials is the only call that can change a partner's BusinessDetails, so the demo has to
+// forward them — and must send no body at all when the fields are blank, or the mock would republish
+// roles with an empty business_name.
+func TestCredentialsPutForwardsBusinessDetails(t *testing.T) {
+	var bodies []string
+	mock := fakeMock(t, map[string]http.HandlerFunc{
+		"GET /admin/state": jsonResp(stateBody),
+		"PUT /admin/handshake": func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			bodies = append(bodies, string(b))
+			w.Write([]byte(`{"steps":["ok"]}`))
+		},
+	})
+	h := newHandlers(t, Config{}, mock, nil)
+
+	doReq(t, h.CredentialsPut, http.MethodPost, "/",
+		`{"partner":"plg","business_name":"PlugSiam Energy","website":"https://plugsiam.example"}`)
+	doReq(t, h.CredentialsPut, http.MethodPost, "/", `{"partner":"plg"}`)
+
+	if len(bodies) != 2 {
+		t.Fatalf("expected two PUTs, got %d", len(bodies))
+	}
+	if !strings.Contains(bodies[0], "PlugSiam Energy") || !strings.Contains(bodies[0], "https://plugsiam.example") {
+		t.Errorf("business details must reach the mock: %s", bodies[0])
+	}
+	if bodies[1] != "" {
+		t.Errorf("rotate-only must send no body, got %q", bodies[1])
 	}
 }
 

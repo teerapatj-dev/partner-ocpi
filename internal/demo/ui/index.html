@@ -113,6 +113,17 @@ select,input{background:var(--bg);border:1px solid var(--line);border-radius:6px
 .st-BLOCKED,.st-RESERVED{color:var(--amber);border-color:var(--amber);background:rgba(255,180,84,.08)}
 .st-OUTOFORDER,.st-INOPERATIVE{color:var(--red);border-color:var(--red);background:rgba(255,107,107,.08)}
 .st-UNKNOWN{color:var(--gray);border-color:var(--gray)}
+.st-PENDING{color:var(--amber);border-color:var(--amber);background:rgba(255,180,84,.08)}
+.st-REVOKED,.st-SUSPENDED{color:var(--red);border-color:var(--red);background:rgba(255,107,107,.08)}
+
+/* live handshake trace — one row per OCPI call/status change while a registration runs */
+.fanrow{margin-bottom:9px}
+.hstrace{border-left:2px solid var(--line);margin:2px 0 10px 8px;padding:2px 0 2px 10px}
+.hsh{font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-bottom:3px}
+.hsl{display:flex;gap:8px;align-items:baseline;font-size:11px;padding:1px 0}
+.hsl .t{color:var(--muted);min-width:52px}
+.hsl.ev{color:var(--amber)}
+.hsl.err{color:var(--red)}
 .price{font-size:17px;font-weight:700;color:var(--amber);letter-spacing:.3px}
 .price small{font-size:11.5px;font-weight:400;color:var(--muted);margin-left:4px}
 .kv{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px dashed var(--line)}
@@ -233,10 +244,16 @@ button.ghost .spin,button.secondary .spin{border-color:rgba(139,150,173,.35);bor
     </div>
     <div class="flow" style="margin-top:14px">
       <h3>🔁 Credentials PUT / DELETE <span class="cardtag">EV-1714</span></h3>
+      <p class="mini">PUT ตาม §7.1.2 เปลี่ยนได้ทั้ง <b>คู่ token</b> และ <b>business_details</b> ในสายเดียว — token มองไม่เห็น (write-only) เลยเทียบให้ดูจาก row ฝั่ง Evolt ก่อน/หลัง</p>
       <div class="act"><span class="lbl">เลือก partner</span>
         <select id="sel-cred-partner"><option value="plg">PlugSiam</option><option value="vct">VoltCity</option><option value="chx">ChargeX</option></select>
-        <button onclick="runFlow('cred-put',this)">🔁 PUT — rotate token</button>
+        <button onclick="runFlow('cred-put',this)">🔁 PUT — rotate token + business</button>
         <button class="danger" onclick="if(confirm('DELETE credentials ที่ Evolt? partner นี้จะหลุดทะเบียนทั้งสองฝั่ง (ตาม spec)'))runFlow('cred-del',this)">🗑 DELETE — ยกเลิกตาม spec</button></div>
+      <div class="act"><span class="lbl">business_details ใหม่</span>
+        <input id="in-cred-name" placeholder="ชื่อธุรกิจ (เว้นว่าง = rotate token เฉยๆ)" style="min-width:230px">
+        <input id="in-cred-web" placeholder="website" style="min-width:170px">
+        <input id="in-cred-logo" placeholder="logo_url" style="min-width:170px">
+        <button class="ghost" onclick="credSuggest()">สุ่มชื่อใหม่ให้</button></div>
     </div>
   </section>
 
@@ -481,8 +498,9 @@ function showDir(tab,dir,btn){
 const FLOWS={
   'evolt-seed':{title:'Initialize Evolt — seed ตัวตน OCPI (3 ตาราง)',card:'setup',dir:'setup',method:'POST',url:'/api/demo/evolt/seed',
     steps:['เขียน ocpi_credentials (is_self, TH/EVT)','เขียน ocpi_credentials_roles (CPO+EMSP)','เขียน ocpi_endpoints (7 endpoint → bff /api/ocpi)','idempotent — มีอยู่แล้วข้าม (insert 0)']},
-  'cred-put':{title:'Credentials — PUT rotate token (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/put',bodyFrom:()=>({partner:val('sel-cred-partner')}),
-    steps:['mock ออก token inbound ใหม่ (B\') แล้ว activate ทันที','ยิง PUT /ocpi/2.2.1/credentials (auth Token C เดิม)','Evolt rotate ฝั่งตัวเอง แล้วตอบ Token C ใหม่','mock สลับ outbound เป็น Token C ใหม่ — คู่ token ใหม่ทั้งสองทิศ','พลาดตรงไหน mock rollback token เดิม (ไม่ล็อกตัวเองตาย)']},
+  'cred-put':{title:'Credentials — PUT rotate token + business_details (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/put',
+    bodyFrom:()=>({partner:val('sel-cred-partner'),business_name:val('in-cred-name'),website:val('in-cred-web'),logo_url:val('in-cred-logo')}),
+    steps:['อ่าน row ฝั่ง Evolt ไว้เป็น "ก่อน"','mock ออก token inbound ใหม่ (B\') แล้ว activate ทันที','ยิง PUT /ocpi/2.2.1/credentials (auth Token C เดิม) พร้อม roles/business_details ชุดใหม่','Evolt rotate token + เขียน roles ใหม่ทั้งชุด แล้วตอบ Token C ใหม่','mock สลับ outbound เป็น Token C ใหม่ — คู่ token ใหม่ทั้งสองทิศ','อ่าน row ฝั่ง Evolt อีกรอบ = "หลัง" (พลาดตรงไหน mock rollback token เดิม)']},
   'cred-del':{title:'Credentials — DELETE unregister ตาม spec (partner → Evolt)',card:'EV-1714',dir:'setup',method:'POST',url:'/api/demo/credentials/delete',bodyFrom:()=>({partner:val('sel-cred-partner')}),
     steps:['ยิง DELETE /ocpi/2.2.1/credentials (auth Token C)','Evolt revoke ทะเบียนฝั่งตัวเอง (soft-revoke)','mock ลบ registration ของตัวเอง','จบ: สองฝั่งไม่รู้จักกัน — handshake ใหม่ได้เลย']},
   'unregister':{title:'ยกเลิกทะเบียน + ล้าง DB — ทุก partner',card:'EV-1321',dir:'setup',method:'POST',url:'/api/demo/unregister',
@@ -571,10 +589,47 @@ function finishModal(f,j,httpStatus){
       return `<div>🟩 <b>${esc(p.partner)}</b> — ดึงได้ <b>${esc(String(got))}</b>${r.total!=null?` / ทั้งหมด ${esc(String(r.total))}`:''} (OCPI ${esc(String(r.ocpi_status_code||''))})</div>`;
     }).join('');
     $('m-rjson').textContent=JSON.stringify(j.data,null,2);
+  }else if(j.ok&&j.data&&j.data.after!==undefined){
+    // Credentials PUT: the tokens are unreadable by design, so the proof is Evolt's own row before
+    // and after — issued-at moved, and the roles carry whatever business_details went with it.
+    $('m-rbody').innerHTML=credDiffHtml(j.data);
+    $('m-rjson').textContent=JSON.stringify(j.data,null,2);
   }else{
     $('m-rbody').innerHTML=j.ok?'':`<span style="color:var(--red)">${esc(j.error||'')}</span>`;
     $('m-rjson').textContent=JSON.stringify(j.ok?j.data:(j.detail||j),null,2);
   }
+}
+// Timestamps here come from a `timestamp without time zone` column the DB already writes in Bangkok
+// local time — converting again would shift them +7. Show them exactly as stored.
+const rawTs=t=>t?String(t).replace('T',' ').slice(0,19):'';
+function credDiffHtml(d){
+  if(!d.after)return '<div class="mini">ยิงสำเร็จ แต่อ่าน row ฝั่ง Evolt ไม่ได้ (ไม่ได้ต่อ DB) — ดู JSON ด้านล่าง</div>';
+  const b=d.before||{},a=d.after,rows=[];
+  const line=(label,x,y)=>{
+    const same=(x||'')===(y||'');
+    rows.push(`<div class="kv"><span>${esc(label)}</span><span>`+(same
+      ?`<span class="mono">${esc(y||'—')}</span>`
+      :`<span class="mono" style="color:var(--muted);text-decoration:line-through">${esc(x||'—')}</span> → <span class="mono" style="color:var(--green)"><b>${esc(y||'—')}</b></span>`)+'</span></div>');
+  };
+  line('status',b.status,a.status);
+  line('token ออกใหม่เมื่อ (เวลาใน DB)',rawTs(b.token_issued_at),rawTs(a.token_issued_at));
+  line('versions url',b.versions_url,a.versions_url);
+  line('endpoints',b.endpoints!=null?String(b.endpoints):'',String(a.endpoints));
+  (a.roles||[]).forEach(r=>{
+    const pb=(b.roles||[]).find(x=>x.role===r.role)||{};
+    line(r.role+' · '+r.party,pb.business_name,r.business_name);
+    if(r.website||pb.website)line(r.role+' · website',pb.website,r.website);
+    if(r.logo_url||pb.logo_url)line(r.role+' · logo_url',pb.logo_url,r.logo_url);
+  });
+  return rows.join('');
+}
+// One click should produce a visibly different name; a fixed string looks like nothing happened on
+// the second press.
+function credSuggest(){
+  const sel=$('sel-cred-partner'),base=sel.options[sel.selectedIndex].text;
+  const tag=['Charging','Mobility','Energy','EV Network','Power'][Math.floor(Math.random()*5)];
+  $('in-cred-name').value=`${base} ${tag} (rev ${1+Math.floor(Math.random()*89)})`;
+  if(!$('in-cred-web').value)$('in-cred-web').value='https://'+base.toLowerCase()+'.example.co.th';
 }
 function clearTimers(){modalTimers.forEach(clearTimeout);modalTimers=[]}
 function closeModal(){$('modal').classList.remove('show');clearTimers()}
@@ -1139,6 +1194,78 @@ function partnerCacheCards(){
 }
 
 // ---- fanout partners ----
+/* A handshake is four OCPI calls and two status columns moving from nothing to REGISTERED, and it is
+   over in a couple of seconds — too fast to catch in the log tab. hsTrace records one partner's run
+   while it happens: the mock's request log gives the calls, and polling both status columns gives the
+   PENDING→REGISTERED transitions. Rendering lives in refreshFanout so the 6s poll cannot wipe it. */
+const REGCLS={REGISTERED:'st-AVAILABLE',PENDING:'st-PENDING',REVOKED:'st-REVOKED',SUSPENDED:'st-SUSPENDED'};
+let hsTrace={},hsTicker=null;
+function regChip(side,st){
+  const s=st||'—';
+  return `<span class="chip ${REGCLS[s]||'st-UNKNOWN'}"><span class="uid">${esc(side)}</span><b>${esc(s)}</b></span>`;
+}
+function hsStart(key,action){
+  hsTrace[key]={dir:action,since:Date.now(),lines:[],seen:{},last:{},done:0,err:null};
+  if(!hsTicker)hsTicker=setInterval(hsTick,900);
+}
+function hsFinish(key,err){
+  const t=hsTrace[key];if(!t)return;
+  t.done=Date.now();t.err=err;
+  t.lines.push({kind:err?'err':'ev',text:err?'✗ '+err:'✓ จบ — สองฝั่งตรงกัน',at:Date.now()});
+  setTimeout(()=>{delete hsTrace[key];refreshFanout()},30000);
+}
+async function hsTick(){
+  await hsPullCalls();
+  await refreshFanout();
+  if(!Object.values(hsTrace).some(t=>!t.done)){clearInterval(hsTicker);hsTicker=null}
+}
+// The mock logs every OCPI call it makes or receives; a handshake shows up as versions → details →
+// credentials on one of the two directions depending on who started it.
+async function hsPullCalls(){
+  const keys=Object.keys(hsTrace).filter(k=>!hsTrace[k].done);
+  if(!keys.length)return;
+  try{
+    const r=await api('/api/demo/requests?limit=80');const j=await r.json();
+    if(!j.ok)return;
+    (j.data||[]).slice().reverse().forEach(e=>{
+      const key=String(e.partner||'PLG').toLowerCase();
+      const t=hsTrace[key];if(!t)return;
+      if(t.seen[e.id])return;
+      const ms=Date.parse(/[Zz]$|[+-]\d\d:?\d\d$/.test(String(e.ts))?e.ts:e.ts+'Z');
+      if(isNaN(ms)||ms<t.since-3000)return;
+      if(moduleOf(e.path)!=='handshake')return;
+      t.seen[e.id]=1;
+      t.lines.push({kind:'call',dir:e.direction,method:e.method,path:String(e.path).replace(/^https?:\/\/[^/]+/,''),
+        http:e.http_status,ocpi:e.ocpi_status_code,at:ms});
+    });
+  }catch(e){}
+}
+function hsNoteStatus(key,p){
+  const t=hsTrace[key];if(!t)return;
+  [['mock',p.mock_status||'—'],['evolt',p.evolt_status||(p.evolt_registered?'REGISTERED':'—')]].forEach(([side,st])=>{
+    if(t.last[side]===undefined){t.last[side]=st;return}
+    if(t.last[side]===st)return;
+    t.lines.push({kind:'ev',text:`${side}: ${t.last[side]} → ${st}`,at:Date.now()});
+    t.last[side]=st;
+  });
+}
+function hsTraceHtml(key){
+  const t=hsTrace[key];if(!t)return '';
+  const head=t.done
+    ?(t.err?`<span class="hsl err">✗ ${esc(t.err)}</span>`:'<span style="color:var(--green)">✓ handshake เสร็จ</span>')
+    :`<span class="spin"></span> กำลัง handshake — ${t.dir==='handshake'?'Evolt เริ่ม':'Partner เริ่ม'}`;
+  const body=t.lines.map(l=>{
+    const at=new Date(l.at).toLocaleTimeString('th-TH',{hour12:false});
+    if(l.kind==='call'){
+      const code=[l.http,l.ocpi].filter(v=>v!=null&&v!=='').join('/');
+      return `<div class="hsl"><span class="t mono">${esc(at)}</span>`+
+        `<span class="mono">${l.dir==='in'?'⇠ Evolt→partner':'⇢ partner→Evolt'} ${esc(l.method)} ${esc(l.path)}</span>`+
+        `<span class="uid mono">${esc(code)}</span></div>`;
+    }
+    return `<div class="hsl ${l.kind==='err'?'err':'ev'}"><span class="t mono">${esc(at)}</span><span>${esc(l.text)}</span></div>`;
+  }).join('');
+  return `<div class="hstrace"><div class="hsh">${head}</div>${body||'<div class="hsl"><span class="uid">รอสายแรก…</span></div>'}</div>`;
+}
 async function refreshFanout(){
   const box=$('fanout-rows');if(!box)return;
   try{
@@ -1147,25 +1274,29 @@ async function refreshFanout(){
     if(!(j.data||[]).length){box.innerHTML='<div class="empty">ไม่มี partner ที่ตั้งค่าไว้</div>';return}
     box.innerHTML=j.data.map(p=>{
       if(!p.reachable)return `<div class="act"><span class="lbl mono">${esc(p.key)}</span><span class="mini">mock ไม่ตอบ</span></div>`;
-      const both=p.mock_status==='REGISTERED'&&p.evolt_registered;
-      const badge=both?'<span class="chip st-AVAILABLE"><b>REGISTERED</b></span>'
-        :`<span class="chip st-UNKNOWN"><b>${esc(p.mock_status||'ยังไม่ลงทะเบียน')}</b><span class="uid">evolt:${p.evolt_registered?'✓':'✗'}</span></span>`;
-      return `<div class="act"><span class="lbl">${esc(p.name)} <span class="mono">${esc(p.party)}</span></span>${badge}`+
+      hsNoteStatus(p.key,p);
+      const evolt=p.evolt_status||(p.evolt_registered?'REGISTERED':'');
+      return `<div class="fanrow"><div class="act"><span class="lbl">${esc(p.name)} <span class="mono">${esc(p.party)}</span></span>`+
+        regChip('mock',p.mock_status)+regChip('evolt',evolt)+
         `<button class="in" onclick="fanoutAct('${esc(p.key)}','handshake',this)">🟢 Evolt เริ่ม</button>`+
         `<button class="out" onclick="fanoutAct('${esc(p.key)}','handshake-partner',this)">🟣 Partner เริ่ม</button>`+
-        `<button class="ghost" onclick="if(confirm('ยกเลิกทะเบียน ${esc(p.name)} + ล้างข้อมูลฝั่ง partner?'))fanoutAct('${esc(p.key)}','unregister',this)">ยกเลิก</button></div>`;
+        `<button class="ghost" onclick="if(confirm('ยกเลิกทะเบียน ${esc(p.name)} + ล้างข้อมูลฝั่ง partner?'))fanoutAct('${esc(p.key)}','unregister',this)">ยกเลิก</button></div>`+
+        hsTraceHtml(p.key)+`</div>`;
     }).join('');
   }catch(e){}
 }
 async function fanoutAct(key,action,btn){
   const html=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>'+html;
+  const traced=action==='handshake'||action==='handshake-partner';
+  if(traced)hsStart(key,action);
   try{
     const r=await api('/api/demo/fanout/'+encodeURIComponent(key)+'/'+action,{method:'POST'});
     const j=await r.json();
-    if(!j.ok)alert(action+' '+key+' ล้มเหลว: '+(j.error||''));
-  }catch(e){alert(String(e))}
+    if(traced)hsFinish(key,j.ok?null:(j.error||'ล้มเหลว'));
+    else if(!j.ok)alert(action+' '+key+' ล้มเหลว: '+(j.error||''));
+  }catch(e){if(traced)hsFinish(key,String(e));else alert(String(e))}
   btn.disabled=false;btn.innerHTML=html;
-  refreshFanout();refreshLog();
+  hsPullCalls().then(refreshFanout);refreshLog();
 }
 
 // ---- request log ----

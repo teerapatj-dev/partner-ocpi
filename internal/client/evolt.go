@@ -295,11 +295,37 @@ func (c *Client) Handshake(ctx context.Context, versionsURL, tokenA string) (Han
 	return out, nil
 }
 
+// BusinessOverride replaces the BusinessDetails a credentials PUT presents. Rotating the token is
+// only half of what §7.1.2 allows: the same call republishes roles, so this is how a partner tells
+// the counterparty it renamed itself or added a website — and the half that is visible afterwards,
+// since the tokens themselves never show up anywhere. Empty fields keep the configured identity.
+type BusinessOverride struct {
+	Name    string `json:"business_name"`
+	Website string `json:"website"`
+	LogoURL string `json:"logo_url"`
+}
+
+func (b BusinessOverride) apply(roles []ocpi.Role) []ocpi.Role {
+	for i := range roles {
+		if b.Name != "" {
+			roles[i].BusinessDetails.Name = b.Name
+		}
+		if b.Website != "" {
+			roles[i].BusinessDetails.Website = b.Website
+		}
+		if b.LogoURL != "" {
+			roles[i].BusinessDetails.LogoURL = b.LogoURL
+		}
+	}
+	return roles
+}
+
 // UpdateCredentials rotates the pairing via PUT /credentials (OCPI §7.1.2, Evolt side EV-1714): a
 // fresh inbound token goes live first (the counterparty may call back mid-request), the PUT carries
 // it, and the response holds our new outbound token. Failure restores the previous pair — a
-// half-rotated REGISTERED counterparty would be locked out.
-func (c *Client) UpdateCredentials(ctx context.Context) (HandshakeResult, error) {
+// half-rotated REGISTERED counterparty would be locked out. biz optionally republishes the
+// BusinessDetails in the same call.
+func (c *Client) UpdateCredentials(ctx context.Context, biz BusinessOverride) (HandshakeResult, error) {
 	out := HandshakeResult{}
 	reg, err := c.st.FirstRegistered(ctx)
 	if err != nil {
@@ -326,7 +352,7 @@ func (c *Client) UpdateCredentials(ctx context.Context) (HandshakeResult, error)
 	body := ocpi.Credentials{
 		Token: newInbound,
 		URL:   c.cfg.BaseURL + "/ocpi/versions",
-		Roles: ocpi.SelfRoles(c.cfg.CountryCode, c.cfg.PartyID, c.cfg.PartnerName),
+		Roles: biz.apply(ocpi.SelfRoles(c.cfg.CountryCode, c.cfg.PartyID, c.cfg.PartnerName)),
 	}
 	res, err := c.do(ctx, http.MethodPut, credURL, reg.TokenOutbound, body, reg.CountryCode, reg.PartyID)
 	if err != nil {
@@ -343,6 +369,9 @@ func (c *Client) UpdateCredentials(ctx context.Context) (HandshakeResult, error)
 		return out, fmt.Errorf("counterparty returned empty token")
 	}
 	out.Steps = append(out.Steps, "PUT credentials ok — token pair rotated")
+	if biz.Name != "" || biz.Website != "" || biz.LogoURL != "" {
+		out.Steps = append(out.Steps, "business_details republished")
+	}
 
 	reg.TokenOutbound = granted.Token
 	if err := c.st.UpdateRegistration(ctx, reg); err != nil {

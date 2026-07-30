@@ -768,18 +768,56 @@ func (h *Handlers) adminByPartner(key string) (*MockAdmin, string, bool) {
 // which is the honest thing to show.
 func (h *Handlers) CredentialsPut(c echo.Context) error {
 	var req struct {
-		Partner string `json:"partner"`
+		Partner      string `json:"partner"`
+		BusinessName string `json:"business_name"`
+		Website      string `json:"website"`
+		LogoURL      string `json:"logo_url"`
 	}
 	_ = c.Bind(&req)
 	admin, label, found := h.adminByPartner(req.Partner)
 	if !found {
 		return fail(c, http.StatusBadRequest, "unknown partner", nil)
 	}
-	result, err := admin.Put(c.Request().Context(), "/admin/handshake", nil)
+	ctx := c.Request().Context()
+
+	// A rotation leaves nothing a viewer could check: both tokens are write-only by design. Evolt's
+	// row before and after is the evidence — token_inbound_issued_at moved, and the roles carry
+	// whatever BusinessDetails the same call republished.
+	cc, pid, partyErr := partnerPartyOf(ctx, admin)
+	before := h.partnerCredential(ctx, cc, pid, partyErr)
+
+	var body any
+	if req.BusinessName != "" || req.Website != "" || req.LogoURL != "" {
+		body = map[string]string{
+			"business_name": req.BusinessName,
+			"website":       req.Website,
+			"logo_url":      req.LogoURL,
+		}
+	}
+	result, err := admin.Put(ctx, "/admin/handshake", body)
 	if err != nil {
 		return failFrom(c, err)
 	}
-	return ok(c, map[string]any{"partner": label, "result": json.RawMessage(result)})
+	return ok(c, map[string]any{
+		"partner": label,
+		"result":  json.RawMessage(result),
+		"before":  before,
+		"after":   h.partnerCredential(ctx, cc, pid, partyErr),
+	})
+}
+
+// partnerCredential is the before/after snapshot for the credentials panel — nil whenever it cannot
+// be read (no DB configured, party unknown), which the UI renders as "ดูฝั่ง Evolt ไม่ได้" rather
+// than as an empty diff that would read like "nothing changed".
+func (h *Handlers) partnerCredential(ctx context.Context, countryCode, partyID string, partyErr error) *PartnerCredential {
+	if h.db == nil || partyErr != nil {
+		return nil
+	}
+	view, err := h.db.PartnerCredential(ctx, countryCode, partyID)
+	if err != nil {
+		return nil
+	}
+	return &view
 }
 
 // CredentialsDelete = the spec-true unregister: the partner DELETEs its credentials at Evolt, Evolt

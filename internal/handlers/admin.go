@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
+	"mock-ocpi-partner/internal/client"
 	"mock-ocpi-partner/internal/ocpi"
 	"mock-ocpi-partner/internal/seed"
 	"mock-ocpi-partner/internal/store"
@@ -76,9 +77,16 @@ func (h *Handlers) AdminHandshake(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
-// AdminCredentialsUpdate drives the outbound PUT /credentials at the counterparty (token rotation).
+// AdminCredentialsUpdate drives the outbound PUT /credentials at the counterparty: token rotation,
+// plus the BusinessDetails in the optional body (empty body = rotate only).
 func (h *Handlers) AdminCredentialsUpdate(c echo.Context) error {
-	result, err := h.cl.UpdateCredentials(c.Request().Context())
+	var biz client.BusinessOverride
+	if c.Request().ContentLength > 0 {
+		if err := c.Bind(&biz); err != nil {
+			return adminErr(c, http.StatusBadRequest, "invalid business_details body")
+		}
+	}
+	result, err := h.cl.UpdateCredentials(c.Request().Context(), biz)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]any{"error": err.Error(), "steps": result.Steps})
 	}

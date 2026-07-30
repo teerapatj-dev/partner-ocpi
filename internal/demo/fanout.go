@@ -56,6 +56,16 @@ func (h *Handlers) FanoutState(c echo.Context) error {
 		row["name"] = state.Partner.Name
 		row["party"] = state.Partner.CountryCode + "/" + state.Partner.PartyID
 		row["mock_status"] = state.RegistrationStatus
+		// Evolt's status column, not just "does a registration exist": PENDING is the whole middle of
+		// a handshake, and the HTTP partner list cannot show it — it returns REGISTERED rows only.
+		if h.db != nil {
+			if status, at, err := h.db.PartnerRegistration(ctx, state.Partner.CountryCode, state.Partner.PartyID); err == nil && status != "" {
+				row["evolt_status"] = status
+				if !at.IsZero() {
+					row["evolt_status_at"] = at
+				}
+			}
+		}
 		if _, err := h.evolt.PartnerCredentialsID(ctx, state.Partner.CountryCode, state.Partner.PartyID); err == nil {
 			row["evolt_registered"] = true
 		} else {

@@ -144,3 +144,34 @@ func TestEndpointURL(t *testing.T) {
 		t.Fatal("unreadable endpoints must error")
 	}
 }
+
+// An override replaces only the fields it carries: a PUT that renames the partner must not blank the
+// website it never mentioned, and a rotate-only PUT must keep the configured identity intact.
+func TestBusinessOverrideApply(t *testing.T) {
+	roles := func() []ocpi.Role {
+		r := ocpi.SelfRoles("TH", "PLG", "PlugSiam")
+		for i := range r {
+			r[i].BusinessDetails.Website = "https://old.example"
+		}
+		return r
+	}
+
+	got := BusinessOverride{Name: "PlugSiam Energy", LogoURL: "https://cdn.example/l.png"}.apply(roles())
+	for _, r := range got {
+		if r.BusinessDetails.Name != "PlugSiam Energy" {
+			t.Errorf("%s: name not applied: %q", r.Role, r.BusinessDetails.Name)
+		}
+		if r.BusinessDetails.LogoURL != "https://cdn.example/l.png" {
+			t.Errorf("%s: logo not applied: %q", r.Role, r.BusinessDetails.LogoURL)
+		}
+		if r.BusinessDetails.Website != "https://old.example" {
+			t.Errorf("%s: an omitted field must be left alone, got %q", r.Role, r.BusinessDetails.Website)
+		}
+	}
+
+	for _, r := range (BusinessOverride{}).apply(roles()) {
+		if r.BusinessDetails.Name != "PlugSiam" || r.BusinessDetails.Website != "https://old.example" {
+			t.Errorf("%s: empty override changed the identity: %+v", r.Role, r.BusinessDetails)
+		}
+	}
+}

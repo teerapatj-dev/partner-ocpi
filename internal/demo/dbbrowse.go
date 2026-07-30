@@ -3,11 +3,13 @@ package demo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -601,6 +603,104 @@ func (b *DBBrowser) TariffOrigins(ctx context.Context, ids []string) (map[string
 			return nil, err
 		}
 		out[id] = o
+	}
+	return out, rows.Err()
+}
+
+// PartnerRegistration reads Evolt's own status column for one party. The HTTP partner list cannot
+// answer this: it returns REGISTERED rows only, so a handshake that is mid-flight (PENDING) or a
+// partner that left (REVOKED) both look exactly like "never registered" from outside. Empty status
+// means no row at all.
+func (b *DBBrowser) PartnerRegistration(ctx context.Context, countryCode, partyID string) (string, time.Time, error) {
+	if b.evolt == nil {
+		return "", time.Time{}, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var status string
+	var at time.Time
+	err := b.evolt.QueryRow(ctx, `
+		SELECT c.status, COALESCE(c.updated_at, c.created_at)
+		FROM ocpi_credentials c
+		JOIN ocpi_credentials_roles r ON r.credentials_id = c.id
+		WHERE c.is_self = false AND r.country_code = $1 AND r.party_id = $2
+		ORDER BY COALESCE(c.updated_at, c.created_at) DESC
+		LIMIT 1`, strings.ToUpper(countryCode), strings.ToUpper(partyID)).Scan(&status, &at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", time.Time{}, nil
+	}
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("read partner registration: %w", err)
+	}
+	return status, at, nil
+}
+
+// PartnerCredential is Evolt's whole view of one partner registration, taken before and after a
+// credentials PUT so the UI can show what the call actually changed. TokenIssuedAt is the proof the
+// token rotated — the token itself is never read out of the database.
+type PartnerCredential struct {
+	Status        string            `json:"status"`
+	VersionsURL   string            `json:"versions_url"`
+	TokenIssuedAt *time.Time        `json:"token_issued_at,omitempty"`
+	Endpoints     int               `json:"endpoints"`
+	Roles         []PartnerCredRole `json:"roles"`
+}
+
+type PartnerCredRole struct {
+	Role         string `json:"role"`
+	Party        string `json:"party"`
+	BusinessName string `json:"business_name"`
+	Website      string `json:"website"`
+	LogoURL      string `json:"logo_url"`
+}
+
+// PartnerCredential reads that view for one party. A missing row is not an error: the caller wants
+// "before" even when the partner is not registered yet, and an empty Status says so.
+func (b *DBBrowser) PartnerCredential(ctx context.Context, countryCode, partyID string) (PartnerCredential, error) {
+	out := PartnerCredential{Roles: []PartnerCredRole{}}
+	if b.evolt == nil {
+		return out, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cc, pid := strings.ToUpper(countryCode), strings.ToUpper(partyID)
+
+	var id string
+	var issued *time.Time
+	err := b.evolt.QueryRow(ctx, `
+		SELECT c.id::text, c.status, COALESCE(c.partner_versions_url,''), c.token_inbound_issued_at
+		FROM ocpi_credentials c
+		JOIN ocpi_credentials_roles r ON r.credentials_id = c.id
+		WHERE c.is_self = false AND r.country_code = $1 AND r.party_id = $2
+		ORDER BY COALESCE(c.updated_at, c.created_at) DESC
+		LIMIT 1`, cc, pid).Scan(&id, &out.Status, &out.VersionsURL, &issued)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, nil
+	}
+	if err != nil {
+		return out, fmt.Errorf("read partner credential: %w", err)
+	}
+	out.TokenIssuedAt = issued
+
+	if err := b.evolt.QueryRow(ctx,
+		`SELECT count(*) FROM ocpi_endpoints WHERE credentials_id = $1`, id).Scan(&out.Endpoints); err != nil {
+		return out, fmt.Errorf("count partner endpoints: %w", err)
+	}
+
+	rows, err := b.evolt.Query(ctx, `
+		SELECT role::text, country_code || '/' || party_id, business_name,
+		       COALESCE(business_website,''), COALESCE(logo_url,'')
+		FROM ocpi_credentials_roles WHERE credentials_id = $1 ORDER BY role`, id)
+	if err != nil {
+		return out, fmt.Errorf("read partner roles: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r PartnerCredRole
+		if err := rows.Scan(&r.Role, &r.Party, &r.BusinessName, &r.Website, &r.LogoURL); err != nil {
+			return out, err
+		}
+		out.Roles = append(out.Roles, r)
 	}
 	return out, rows.Err()
 }
